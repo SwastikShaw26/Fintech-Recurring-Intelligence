@@ -1,0 +1,31 @@
+﻿# Ignore local environments, generated data and secrets
+
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.log
+
+# Local generated outputs; keep documented synthetic fixtures in Git
+data/processed/*
+!data/processed/.gitkeep
+
+# Frontend dependencies and build outputs
+node_modules/
+.next/
+.vite/
+
+# Local editor and operating-system files
+.vscode/
+.DS_Store
+Thumbs.db

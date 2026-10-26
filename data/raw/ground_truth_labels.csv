@@ -1,0 +1,58 @@
+transaction_id,merchant_id,commitment_id,is_recurring,cadence,scenario_type,expected_price_change,expected_resumption,payment_route
+TXN-00015,M004,C-S004,true,annual,annual_shifted,false,false,bank mandate
+TXN-00012,M003,C-S003,true,annual,annual_renewal,false,false,card
+TXN-00016,M004,C-S004,true,annual,annual_shifted,false,false,bank mandate
+TXN-00042,M002,C-S010,true,quarterly,descriptor_change,false,false,card
+TXN-00013,M003,C-S003,true,annual,annual_renewal,false,false,card
+TXN-00043,M002,C-S010,true,quarterly,descriptor_change,false,false,card
+TXN-00023,M006,C-S006,true,irregular,irregular_recurring,false,false,unknown
+TXN-00024,M006,C-S006,true,irregular,irregular_recurring,false,false,unknown
+TXN-00007,M002,C-S002,true,quarterly,quarterly_fixed,false,false,card
+TXN-00044,M002,C-S010,true,quarterly,descriptor_change,false,false,card
+TXN-00032,M008,C-S008,true,monthly,resumed_after_gap,false,true,UPI AutoPay
+TXN-00033,M008,C-S008,true,monthly,resumed_after_gap,false,true,UPI AutoPay
+TXN-00025,M006,C-S006,true,irregular,irregular_recurring,false,false,unknown
+TXN-00034,M008,C-S008,true,monthly,resumed_after_gap,false,true,UPI AutoPay
+TXN-00026,M006,C-S006,true,irregular,irregular_recurring,false,false,unknown
+TXN-00045,M002,C-S010,true,quarterly,descriptor_change,false,false,card
+TXN-00008,M002,C-S002,true,quarterly,quarterly_fixed,false,false,card
+TXN-00017,M004,C-S004,true,annual,annual_shifted,false,false,bank mandate
+TXN-00052,M001,,false,none,irregular_one_offs,false,false,UPI
+TXN-00053,M001,,false,none,irregular_one_offs,false,false,UPI
+TXN-00027,M006,C-S006,true,irregular,irregular_recurring,false,false,unknown
+TXN-00046,M005,,false,none,habitual_one_off_purchases,false,false,card
+TXN-00001,M001,C-S001,true,monthly,monthly_fixed,false,false,UPI AutoPay
+TXN-00037,M001,C-S009,true,monthly,price_increase,true,false,UPI AutoPay
+TXN-00009,M002,C-S002,true,quarterly,quarterly_fixed,false,false,card
+TXN-00047,M005,,false,none,habitual_one_off_purchases,false,false,card
+TXN-00048,M005,,false,none,habitual_one_off_purchases,false,false,card
+TXN-00018,M005,C-S005,true,monthly,variable_amount,false,false,card
+TXN-00002,M001,C-S001,true,monthly,monthly_fixed,false,false,UPI AutoPay
+TXN-00038,M001,C-S009,true,monthly,price_increase,true,false,UPI AutoPay
+TXN-00014,M003,C-S003,true,annual,annual_renewal,false,false,card
+TXN-00054,M001,,false,none,irregular_one_offs,false,false,UPI
+TXN-00049,M005,,false,none,habitual_one_off_purchases,false,false,card
+TXN-00050,M005,,false,none,habitual_one_off_purchases,false,false,card
+TXN-00028,M007,C-S007,true,monthly,trial_to_paid,false,false,card
+TXN-00019,M005,C-S005,true,monthly,variable_amount,false,false,card
+TXN-00003,M001,C-S001,true,monthly,monthly_fixed,false,false,UPI AutoPay
+TXN-00029,M007,C-S007,true,monthly,trial_to_paid,false,false,card
+TXN-00039,M001,C-S009,true,monthly,price_increase,true,false,UPI AutoPay
+TXN-00035,M008,C-S008,true,monthly,resumed_after_gap,false,true,UPI AutoPay
+TXN-00020,M005,C-S005,true,monthly,variable_amount,false,false,card
+TXN-00004,M001,C-S001,true,monthly,monthly_fixed,false,false,UPI AutoPay
+TXN-00030,M007,C-S007,true,monthly,trial_to_paid,false,false,card
+TXN-00040,M001,C-S009,true,monthly,price_increase,true,false,UPI AutoPay
+TXN-00057,M001,,false,none,refund_credit,false,false,UPI
+TXN-00010,M002,C-S002,true,quarterly,quarterly_fixed,false,false,card
+TXN-00036,M008,C-S008,true,monthly,resumed_after_gap,false,true,UPI AutoPay
+TXN-00021,M005,C-S005,true,monthly,variable_amount,false,false,card
+TXN-00005,M001,C-S001,true,monthly,monthly_fixed,false,false,UPI AutoPay
+TXN-00055,M001,,false,none,irregular_one_offs,false,false,UPI
+TXN-00031,M007,C-S007,true,monthly,trial_to_paid,false,false,card
+TXN-00041,M001,C-S009,true,monthly,price_increase,true,false,UPI AutoPay
+TXN-00051,M003,,false,none,single_purchase,false,false,card
+TXN-00056,M001,,false,none,irregular_one_offs,false,false,UPI
+TXN-00022,M005,C-S005,true,monthly,variable_amount,false,false,card
+TXN-00006,M001,C-S001,true,monthly,monthly_fixed,false,false,UPI AutoPay
+TXN-00011,M002,C-S002,true,quarterly,quarterly_fixed,false,false,card
