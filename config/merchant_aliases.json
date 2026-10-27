@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "aliases": {
+    "CLDNST DIGITAL": "CLOUDNEST",
+    "CLOUDNEST RENEWAL": "CLOUDNEST"
+  },
+  "notes": {
+    "CLOUDNEST": "Resolved merchant alias linking CLDNST DIGITAL and CLOUDNEST RENEWAL across descriptor changes while separating distinct price tiers (599 vs 899).",
+    "STREAMBEE*SUBSCRIPTION": "Monthly fixed subscription at 199.00.",
+    "STREAMBEE PRICE PLAN": "Monthly plan with observed price increase from 199.00 to 249.00.",
+    "STREAMBEE ONE-OFF": "One-off irregular UPI transactions kept separate."
+  }
+}

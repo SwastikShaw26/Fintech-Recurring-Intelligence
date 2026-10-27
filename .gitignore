@@ -1,31 +1,45 @@
-﻿# Ignore local environments, generated data and secrets
-
+# ── Python ────────────────────────────────────────────────────
 .venv/
 venv/
 __pycache__/
 *.py[cod]
-.env
-.env.*
-!.env.example
-.pytest_cache/
+*.pyo
 .mypy_cache/
 .ruff_cache/
 .coverage
 htmlcov/
-dist/
-build/
-*.log
+.pytest_cache/
 
-# Local generated outputs; keep documented synthetic fixtures in Git
+# ── Environment / Secrets ─────────────────────────────────────
+.env
+.env.*
+!.env.example
+# Keep frontend/.env (contains only public VITE_API_URL, no secrets)
+!frontend/.env
+
+# ── Generated detector output (reproducible — re-run detector) ─
 data/processed/*
 !data/processed/.gitkeep
 
-# Frontend dependencies and build outputs
+# ── Frontend ──────────────────────────────────────────────────
 node_modules/
+# Commit frontend/dist so FastAPI can serve the SPA without a build step
+# Uncomment the line below ONLY if you prefer teammates to build locally:
+# frontend/dist/
 .next/
 .vite/
 
-# Local editor and operating-system files
+# ── Editor / OS ───────────────────────────────────────────────
 .vscode/
+.idea/
 .DS_Store
 Thumbs.db
+*.log
+
+# ── Build artefacts ───────────────────────────────────────────
+build/
+*.egg-info/
+dist/
+# Exception: keep frontend/dist (FastAPI static files)
+!frontend/dist/
+!frontend/dist/**

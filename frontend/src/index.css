@@ -1,0 +1,14 @@
+/* Global base reset — no Tailwind import to avoid conflicts with App.css design system */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button, input, select {
+  font: inherit;
+}
