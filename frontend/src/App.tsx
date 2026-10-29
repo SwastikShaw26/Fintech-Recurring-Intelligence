@@ -1,36 +1,39 @@
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
-  Activity,
-  ArrowDownRight,
-  Bell,
   CheckCircle2,
+  Bell,
   ChevronRight,
-  CircleDollarSign,
-  Clock3,
   CreditCard,
   LayoutDashboard,
   RefreshCw,
   Search,
   ShieldCheck,
-  Sparkles,
-  Wallet,
   X,
 } from 'lucide-react'
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import './App.css'
 
 const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
 
-type AnyRecord = Record<string, any>
+type AnyRecord = Record<string, unknown>
+type Evaluation = {
+  precision: number
+  recall: number
+  f1_score: number
+  accuracy: number
+  true_positives: number
+  true_negatives: number
+  false_positives: number
+  false_negatives: number
+  evaluated_transactions: number
+}
+type CancellationGuidance = {
+  mechanism: string
+  regulatory_framework: string
+  summary: string
+  steps?: string[]
+  important_notes?: string[]
+}
 
 function money(value: unknown) {
   const n = Number(value ?? 0)
@@ -42,22 +45,27 @@ function money(value: unknown) {
 }
 
 function pretty(value: unknown) {
-  if (value === null || value === undefined || value === '') return '—'
+  if (value === null || value === undefined || value === '') return 'Not recorded'
   return String(value).replaceAll('_', ' ')
 }
 
-function getArray(data: any, ...keys: string[]): AnyRecord[] {
-  if (Array.isArray(data)) return data
+function getArray(data: unknown, ...keys: string[]): AnyRecord[] {
+  const isRecord = (value: unknown): value is AnyRecord =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+
+  if (Array.isArray(data)) return data.filter(isRecord)
   for (const key of keys) {
-    if (Array.isArray(data?.[key])) return data[key]
+    const value = isRecord(data) ? data[key] : undefined
+    if (Array.isArray(value)) return value.filter(isRecord)
   }
   return []
 }
 
-function getNumber(data: any, ...keys: string[]): number {
+function getNumber(data: AnyRecord, ...keys: string[]): number {
   for (const key of keys) {
-    const value = Number(data?.[key])
-    if (data?.[key] !== null && data?.[key] !== undefined && Number.isFinite(value)) {
+    const rawValue = data[key]
+    const value = Number(rawValue)
+    if (rawValue !== null && rawValue !== undefined && Number.isFinite(value)) {
       return value
     }
   }
@@ -84,14 +92,18 @@ export default function App() {
   const [commitments, setCommitments] = useState<AnyRecord[]>([])
   const [alerts, setAlerts] = useState<AnyRecord[]>([])
   const [selected, setSelected] = useState<AnyRecord | null>(null)
-  const [evaluation, setEvaluation] = useState<AnyRecord | null>(null)
+  const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
 
-  async function loadData() {
-    setLoading(true)
-    setError('')
+  async function loadData(showLoading = true) {
+    if (showLoading) {
+      setLoading(true)
+      setError('')
+    }
 
     try {
       const endpoints = [
@@ -112,25 +124,64 @@ export default function App() {
         }),
       )
 
-      setSummary(responses[0])
+      setSummary(responses[0] as AnyRecord)
       setTransactions(getArray(responses[1], 'transactions', 'items', 'data'))
       setCommitments(getArray(responses[2], 'commitments', 'items', 'data'))
       setAlerts(getArray(responses[3], 'alerts', 'items', 'data'))
-      setEvaluation(responses[4] ?? null)
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Could not connect to the FinSight API.',
-      )
+      setEvaluation((responses[4] as Evaluation | null) ?? null)
+    } catch {
+      setError('The dashboard could not retrieve the latest records. Check that the local data service is running, then try again.')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    void loadData()
+    if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') return
+    // Initial loading synchronizes view state with the API response below.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData(false)
   }, [])
+
+  useEffect(() => {
+    if (!selected) return
+
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    closeButtonRef.current?.focus()
+
+    function handleDialogKeys(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setSelected(null)
+        return
+      }
+
+      if (event.key !== 'Tab') return
+      const focusable = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '.detail-modal button:not(:disabled), .detail-modal a[href], .detail-modal input:not(:disabled), .detail-modal [tabindex]:not([tabindex="-1"])',
+        ),
+      )
+      if (focusable.length === 0) return
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', handleDialogKeys)
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeys)
+      previouslyFocusedRef.current?.focus()
+    }
+  }, [selected])
 
   const filteredTransactions = transactions.filter((tx) =>
     Object.values(tx).some((value) =>
@@ -156,16 +207,6 @@ export default function App() {
     'review_required_transaction_count',
   )
 
-  // Illustrative chart only; the API does not provide monthly history.
-  const chartData = [
-    { month: 'May', amount: monthlySpend * 0.82 },
-    { month: 'Jun', amount: monthlySpend * 0.9 },
-    { month: 'Jul', amount: monthlySpend * 0.86 },
-    { month: 'Aug', amount: monthlySpend * 1.03 },
-    { month: 'Sep', amount: monthlySpend * 0.95 },
-    { month: 'Oct', amount: monthlySpend },
-  ]
-
   const navItems = [
     { name: 'Overview', icon: LayoutDashboard },
     { name: 'Recurring payments', icon: RefreshCw },
@@ -176,7 +217,7 @@ export default function App() {
   function valueFor(
     item: AnyRecord,
     keys: string[],
-    fallback: unknown = '—',
+    fallback: unknown = 'Not recorded',
   ) {
     for (const key of keys) {
       if (item[key] !== undefined && item[key] !== null) return item[key]
@@ -221,101 +262,77 @@ export default function App() {
       : String(value)
   }
 
+  const selectedGuidance = selected?.cancellation_guidance as CancellationGuidance | undefined
+  const pageLabel = page === 'Evaluation & Audit' ? 'Evaluation & audit' : page
+
+  if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') {
+    return (
+      <main className="not-found">
+        <p className="not-found-brand">FinSight</p>
+        <h1>This page isn’t in the ledger.</h1>
+        <p>FinSight is a single workspace for reviewing recurring payment evidence.</p>
+        <a className="primary-button" href="/">Back to overview</a>
+      </main>
+    )
+  }
+
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-icon"><Activity size={22} /></div>
-          <div>
-            <div className="brand-name">FinSight</div>
-            <div className="brand-subtitle">RECURRING INTELLIGENCE</div>
-          </div>
+          <div className="brand-name">FinSight</div>
+          <div className="brand-subtitle">Payment evidence</div>
         </div>
 
-        <div className="workspace-label">WORKSPACE</div>
-
-        <nav className="navigation">
+        <nav className="navigation" aria-label="Main navigation">
           {navItems.map(({ name, icon: Icon }) => (
             <button
               key={name}
               className={`nav-item ${page === name ? 'active' : ''}`}
               onClick={() => setPage(name)}
+              aria-current={page === name ? 'page' : undefined}
+              type="button"
             >
-              <Icon size={18} />
-              <span>{name}</span>
+              <Icon size={18} strokeWidth={1.75} />
+              <span>{name === 'Evaluation & Audit' ? 'Evaluation & audit' : name}</span>
               {name === 'Recurring payments' && commitments.length > 0 && (
                 <span className="nav-count">{commitments.length}</span>
-              )}
-              {name === 'Evaluation & Audit' && evaluation && (
-                <span className="nav-count green-count">100%</span>
               )}
             </button>
           ))}
         </nav>
 
-        <div className="sidebar-bottom">
-          <div className="privacy-card">
-            <ShieldCheck size={20} />
-            <div>
-              <strong>Privacy first</strong>
-              <p>Demo uses synthetic transaction data only.</p>
-            </div>
-          </div>
-
-          <div className="profile">
-            <div className="avatar">FS</div>
-            <div className="profile-copy">
-              <strong>FinSight Demo</strong>
-              <span>Local workspace</span>
-            </div>
-            <span className="status-dot" />
-          </div>
-        </div>
+        <p className="sidebar-note">Demo workspace<br />Synthetic transaction records</p>
       </aside>
 
-      <main className="main-area">
+      <main className="main-area" id="main-content">
         <header className="topbar">
-          <div className="breadcrumb">
-            Workspace <ChevronRight size={14} /> <strong>{page}</strong>
-          </div>
+          <div className="breadcrumb"><span>Workspace</span><strong>{pageLabel}</strong></div>
 
-          <div className="topbar-actions">
-            <span className="data-badge"><span /> Synthetic data</span>
-            <button
-              className="icon-button"
-              aria-label="Refresh data"
-              onClick={() => void loadData()}
-              disabled={loading}
-            >
-              <RefreshCw size={17} />
-            </button>
-            <div className="avatar small">FS</div>
-          </div>
+          <span className="data-source">Synthetic transaction data</span>
         </header>
 
         <div className="page-content">
           <section className="welcome-row">
             <div>
-              <div className="eyebrow">
-                <Sparkles size={14} /> RECURRING PAYMENT INTELLIGENCE
-              </div>
               <h1>
                 {page === 'Overview'
-                  ? 'Your money, made visible.'
+                  ? 'Recurring charges in your history.'
                   : page === 'Recurring payments'
-                    ? 'Recurring payments'
+                    ? 'Patterns found in your transactions.'
                     : page === 'Transactions'
                       ? 'Transaction history'
-                      : 'Evaluation & Benchmark Audit'}
+                      : 'How the detector performed'}
               </h1>
               <p className="subtitle">
                 {page === 'Overview'
-                  ? 'Find repeating charges hiding in transaction history.'
+                  ? 'Estimated costs, observed amounts, and the patterns that need review.'
                   : page === 'Recurring payments'
-                    ? 'Review detected patterns, cadence, and estimated costs.'
+                    ? 'Compare the observed amounts and cadence behind each candidate.'
                     : page === 'Transactions'
-                      ? 'Explore transaction records and review unusual amounts.'
-                      : 'Benchmark metrics and validation against ground-truth labels.'}
+                      ? 'Synthetic transaction records with detector review flags.'
+                      : 'Precision, recall, and error counts against labelled records.'}
               </p>
             </div>
 
@@ -323,201 +340,126 @@ export default function App() {
               className="primary-button"
               onClick={() => void loadData()}
               disabled={loading}
+              type="button"
             >
-              <RefreshCw size={16} /> Refresh analysis
+              <RefreshCw size={16} /> {loading ? 'Refreshing' : 'Refresh analysis'}
             </button>
           </section>
 
           {error && (
-            <div className="error-banner">
+            <div className="error-banner" role="alert">
               <div>
-                <strong>Could not load dashboard data</strong>
+                <strong>Dashboard data is unavailable</strong>
                 <p>{error}</p>
-                <span>Check that the FastAPI backend is running on port 8000.</span>
+                <span>Start the local data service, then retry.</span>
               </div>
-              <button className="secondary-button" onClick={() => void loadData()}>
+              <button className="secondary-button" onClick={() => void loadData()} disabled={loading} type="button">
                 Retry
               </button>
             </div>
           )}
 
           {loading && (
-            <div className="loading-line">
-              <span /> Loading transaction intelligence…
+            <div className="loading-line" role="status" aria-live="polite">
+              <span aria-hidden="true" /> Loading transaction data
             </div>
           )}
 
           {page === 'Overview' && (
             <>
-              <section className="metric-grid">
-                <Metric
-                  title="Monthly equivalent"
-                  value={money(monthlySpend)}
-                  icon={<Wallet size={19} />}
-                  detail="Annual estimate divided by 12"
-                  tone="green"
-                />
-                <Metric
-                  title="Estimated annual spend"
-                  value={money(annualSpend)}
-                  icon={<CircleDollarSign size={19} />}
-                  detail="Only where cadence is estimable"
-                  tone="blue"
-                />
-                <Metric
-                  title="Detected patterns"
-                  value={String(totalCommitments)}
-                  icon={<RefreshCw size={19} />}
-                  detail="Candidates, not confirmed mandates"
-                  tone="purple"
-                />
-                <Metric
-                  title="Needs review"
-                  value={String(reviewCount)}
-                  icon={<Bell size={19} />}
-                  detail={`${reviewTransactionCount} transaction(s) flagged`}
-                  tone="orange"
-                />
+              <section className="summary-ledger" aria-label="Recurring payment summary">
+                <div className="lead-amount">
+                  <span className="stat-label">Estimated monthly equivalent</span>
+                  <strong>{money(monthlySpend)}</strong>
+                  <span className="stat-note">Annual estimate divided by 12</span>
+                </div>
+                <dl className="summary-facts">
+                  <div>
+                    <dt>Estimated annual cost</dt>
+                    <dd>{money(annualSpend)}<span>Where cadence can be estimated</span></dd>
+                  </div>
+                  <div>
+                    <dt>Detected patterns</dt>
+                    <dd>{totalCommitments}<span>Candidates from transaction history</span></dd>
+                  </div>
+                  <div>
+                    <dt>Transactions flagged</dt>
+                    <dd>{reviewTransactionCount}<span>{reviewCount} review items</span></dd>
+                  </div>
+                </dl>
               </section>
 
               <section className="overview-grid">
-                <div className="panel spend-panel">
+                <section className="panel ledger-panel">
                   <div className="panel-heading">
                     <div>
-                      <h2>Recurring spend overview</h2>
-                      <p>Illustrative trend based on current estimate</p>
+                      <h2>Detected patterns</h2>
+                      <p>Transaction evidence behind each recurring candidate</p>
                     </div>
-                    <span className="period-pill">Illustrative</span>
+                    <button
+                      className="text-button"
+                      onClick={() => setPage('Recurring payments')}
+                      type="button"
+                    >
+                      View all
+                    </button>
                   </div>
+                  <CommitmentTable
+                    items={commitments.slice(0, 5)}
+                    loading={loading}
+                    onSelect={setSelected}
+                    nameFor={commitmentName}
+                    amountFor={commitmentAmount}
+                    cadenceFor={commitmentCadence}
+                    confidenceFor={confidence}
+                  />
+                </section>
 
-                  <div className="chart-summary">
-                    <strong>{money(monthlySpend)}</strong>
-                    <span><ArrowDownRight size={15} /> Monthly equivalent</span>
-                  </div>
-
-                  <div className="chart-wrap">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart
-                        data={chartData}
-                        margin={{ top: 12, right: 12, left: -16, bottom: 0 }}
-                      >
-                        <CartesianGrid
-                          stroke="#263244"
-                          strokeDasharray="4 5"
-                          vertical={false}
-                        />
-                        <XAxis
-                          dataKey="month"
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: '#8491a5', fontSize: 12 }}
-                        />
-                        <YAxis
-                          axisLine={false}
-                          tickLine={false}
-                          tick={{ fill: '#8491a5', fontSize: 11 }}
-                          tickFormatter={(v) => `₹${v}`}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            background: '#111a29',
-                            border: '1px solid #29364a',
-                            borderRadius: 10,
-                            color: '#fff',
-                          }}
-                          formatter={(value) => [money(value), 'Illustrative estimate']}
-                        />
-                        <Line
-                          type="monotone"
-                          dataKey="amount"
-                          stroke="#5ce0b0"
-                          strokeWidth={3}
-                          dot={{ r: 3, fill: '#5ce0b0', strokeWidth: 0 }}
-                          activeDot={{ r: 5 }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  <p className="chart-footnote">
-                    Illustrative only — these points are not historical monthly spending.
-                  </p>
-                </div>
-
-                <div className="panel alerts-panel">
+                <section className="panel alerts-panel">
                   <div className="panel-heading">
                     <div>
-                      <h2>Review queue</h2>
-                      <p>Transactions and patterns worth a closer look</p>
+                      <h2>Needs a closer look</h2>
+                      <p>Flags from the transaction detector</p>
                     </div>
                     <span className="alert-count">{alerts.length}</span>
                   </div>
-
                   <div className="alert-list">
                     {alerts.slice(0, 5).map((alert, index) => (
-                      <div
-                        className="alert-item"
-                        key={String(alert.alert_id ?? alert.id ?? index)}
-                      >
-                        <div className="alert-symbol"><Clock3 size={17} /></div>
+                      <div className="alert-item" key={String(alert.alert_id ?? alert.id ?? index)}>
                         <div className="alert-copy">
                           <strong>
-                            {String(
-                              valueFor(
-                                alert,
-                                ['title', 'display_name', 'merchant', 'description', 'type'],
-                                'Review suggested',
-                              ),
-                            )}
+                            {String(valueFor(
+                              alert,
+                              ['title', 'display_name', 'merchant', 'description', 'type'],
+                              'Review suggested',
+                            ))}
                           </strong>
                           <p>{evidenceText(alert)}</p>
-                          {alert.recommended_action && (
+                          {Boolean(alert.recommended_action) && (
                             <p className="alert-action">
-                              Suggested: {String(alert.recommended_action)}
+                              Next check: {String(alert.recommended_action)}
                             </p>
                           )}
                         </div>
-                        <ChevronRight size={16} className="alert-chevron" />
                       </div>
                     ))}
-
+                    {loading && alerts.length === 0 && (
+                      <div className="alert-skeletons" role="status" aria-label="Loading review items">
+                        <span /><span /><span />
+                      </div>
+                    )}
                     {alerts.length === 0 && !loading && (
-                      <EmptyState text="No review alerts returned by the API." />
+                      <EmptyState text="No unusual transactions need review." />
                     )}
                   </div>
-
                   <button
                     className="text-button"
                     onClick={() => setPage('Transactions')}
+                    type="button"
                   >
-                    Review transactions <ChevronRight size={15} />
+                    Review transactions
                   </button>
-                </div>
-              </section>
-
-              <section className="panel table-panel">
-                <div className="panel-heading">
-                  <div>
-                    <h2>Detected recurring patterns</h2>
-                    <p>Evidence-backed candidates from transaction history</p>
-                  </div>
-                  <button
-                    className="text-button"
-                    onClick={() => setPage('Recurring payments')}
-                  >
-                    View all <ChevronRight size={15} />
-                  </button>
-                </div>
-
-                <CommitmentTable
-                  items={commitments.slice(0, 5)}
-                  loading={loading}
-                  onSelect={setSelected}
-                  nameFor={commitmentName}
-                  amountFor={commitmentAmount}
-                  cadenceFor={commitmentCadence}
-                  confidenceFor={confidence}
-                />
+                </section>
               </section>
             </>
           )}
@@ -539,9 +481,11 @@ export default function App() {
               <div className="search-box">
                 <Search size={17} />
                 <input
+                  type="search"
+                  aria-label="Search recurring payments"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search merchant or cadence…"
+                  placeholder="Search merchant or cadence"
                 />
               </div>
 
@@ -574,29 +518,31 @@ export default function App() {
               <div className="search-box">
                 <Search size={17} />
                 <input
+                  type="search"
+                  aria-label="Search transactions"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search descriptions, dates, amounts…"
+                  placeholder="Search descriptions, dates, or amounts"
                 />
               </div>
 
               <div className="table-scroll">
-                <table>
+                <table className="transaction-table" aria-label="Transactions">
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Description</th>
-                      <th>Method</th>
-                      <th>Direction</th>
-                      <th>Review</th>
-                      <th className="numeric">Amount</th>
+                      <th scope="col">Date</th>
+                      <th scope="col">Description</th>
+                      <th scope="col">Method</th>
+                      <th scope="col">Direction</th>
+                      <th scope="col">Review</th>
+                      <th className="numeric" scope="col">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredTransactions.map((tx, index) => (
                       <tr key={String(tx.transaction_id ?? tx.id ?? index)}>
-                        <td>{pretty(valueFor(tx, ['date', 'transaction_date']))}</td>
-                        <td>
+                        <td data-label="Date">{pretty(valueFor(tx, ['date', 'transaction_date']))}</td>
+                        <td data-label="Description">
                           <strong>
                             {String(
                               valueFor(
@@ -606,26 +552,26 @@ export default function App() {
                               ),
                             )}
                           </strong>
-                          {tx.review_required && tx.review_reason && (
+                          {Boolean(tx.review_required && tx.review_reason) && (
                             <p className="transaction-review-reason">
                               {String(tx.review_reason)}
                             </p>
                           )}
                         </td>
-                        <td>{pretty(valueFor(tx, ['payment_method', 'method']))}</td>
-                        <td>
+                        <td data-label="Method">{pretty(valueFor(tx, ['payment_method', 'method']))}</td>
+                        <td data-label="Direction">
                           <span className="direction-pill">
                             {pretty(valueFor(tx, ['direction'], 'debit'))}
                           </span>
                         </td>
-                        <td>
+                        <td data-label="Review">
                           {tx.review_required ? (
                             <span className="review-pill">Review</span>
                           ) : (
-                            <span className="no-review">—</span>
+                            <span className="no-review">Not flagged</span>
                           )}
                         </td>
-                        <td className="numeric amount-cell">
+                        <td data-label="Amount" className="numeric amount-cell">
                           {money(valueFor(tx, ['amount'], 0))}
                         </td>
                       </tr>
@@ -644,9 +590,9 @@ export default function App() {
             <section className="panel table-panel full-panel">
               <div className="panel-heading">
                 <div>
-                  <h2>Evaluation Benchmark & Audit</h2>
+                  <h2>Detector evaluation</h2>
                   <p>
-                    Deterministic validation against labelled synthetic transactions (Ground Truth Contract).
+                    Results against labelled synthetic transactions.
                   </p>
                 </div>
                 <span className="period-pill">
@@ -655,7 +601,7 @@ export default function App() {
               </div>
 
               {evaluation && (
-                <div className="eval-panel" style={{ marginTop: 0 }}>
+                <div className="eval-panel">
                   <div className="eval-grid">
                     <div className="eval-stat">
                       <span>Precision</span>
@@ -666,71 +612,81 @@ export default function App() {
                       <strong>{(evaluation.recall * 100).toFixed(1)}%</strong>
                     </div>
                     <div className="eval-stat">
-                      <span>F1-Score</span>
+                      <span>F1 score</span>
                       <strong>{(evaluation.f1_score * 100).toFixed(1)}%</strong>
                     </div>
                     <div className="eval-stat">
-                      <span>Overall Accuracy</span>
+                      <span>Accuracy</span>
                       <strong>{(evaluation.accuracy * 100).toFixed(1)}%</strong>
                     </div>
                   </div>
 
-                  <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-                    <div style={{ padding: 12, background: 'rgba(92, 224, 176, 0.08)', borderRadius: 8, border: '1px solid rgba(92, 224, 176, 0.2)', textAlign: 'center' }}>
-                      <span style={{ fontSize: 11, color: '#8491a5', display: 'block' }}>True Positives</span>
-                      <strong style={{ color: '#5ce0b0', fontSize: 18 }}>{evaluation.true_positives}</strong>
+                  <div className="audit-breakdown">
+                    <div className="audit-count">
+                      <span>True positives</span>
+                      <strong>{evaluation.true_positives}</strong>
                     </div>
-                    <div style={{ padding: 12, background: 'rgba(92, 224, 176, 0.08)', borderRadius: 8, border: '1px solid rgba(92, 224, 176, 0.2)', textAlign: 'center' }}>
-                      <span style={{ fontSize: 11, color: '#8491a5', display: 'block' }}>True Negatives</span>
-                      <strong style={{ color: '#5ce0b0', fontSize: 18 }}>{evaluation.true_negatives}</strong>
+                    <div className="audit-count">
+                      <span>True negatives</span>
+                      <strong>{evaluation.true_negatives}</strong>
                     </div>
-                    <div style={{ padding: 12, background: 'rgba(255, 255, 255, 0.03)', borderRadius: 8, border: '1px solid rgba(255, 255, 255, 0.06)', textAlign: 'center' }}>
-                      <span style={{ fontSize: 11, color: '#8491a5', display: 'block' }}>False Positives</span>
-                      <strong style={{ color: evaluation.false_positives > 0 ? '#f87171' : '#aab7c9', fontSize: 18 }}>{evaluation.false_positives}</strong>
+                    <div className={`audit-count ${evaluation.false_positives > 0 ? 'error' : ''}`}>
+                      <span>False positives</span>
+                      <strong>{evaluation.false_positives}</strong>
                     </div>
-                    <div style={{ padding: 12, background: 'rgba(255, 255, 255, 0.03)', borderRadius: 8, border: '1px solid rgba(255, 255, 255, 0.06)', textAlign: 'center' }}>
-                      <span style={{ fontSize: 11, color: '#8491a5', display: 'block' }}>False Negatives</span>
-                      <strong style={{ color: evaluation.false_negatives > 0 ? '#f87171' : '#aab7c9', fontSize: 18 }}>{evaluation.false_negatives}</strong>
+                    <div className={`audit-count ${evaluation.false_negatives > 0 ? 'error' : ''}`}>
+                      <span>False negatives</span>
+                      <strong>{evaluation.false_negatives}</strong>
                     </div>
                   </div>
 
-                  <div style={{ marginTop: 20, padding: 16, background: 'rgba(30, 58, 138, 0.15)', borderRadius: 10, border: '1px solid rgba(59, 130, 246, 0.3)' }}>
-                    <h3 style={{ fontSize: 14, color: '#93c5fd', margin: '0 0 6px 0' }}>Audit Verification Highlights</h3>
-                    <ul style={{ margin: 0, paddingLeft: 18, color: '#cbd5e1', fontSize: 13, lineHeight: 1.6 }}>
-                      <li><strong>Merchant Descriptor Resolution:</strong> Successfully matched descriptor changes (e.g. CLDNST DIGITAL → CLOUDNEST RENEWAL) without corrupting separate price tiers.</li>
-                      <li><strong>Outlier Filtering:</strong> Correctly isolated one-off single purchases from recurring annual commitments (FITTRAIL single purchase).</li>
-                      <li><strong>Trial-to-Paid Sequences:</strong> Detected nominal token charges (1 INR SafeVault trial) transitioning into regular recurring billing.</li>
-                      <li><strong>Price Increase Alerts:</strong> Accurately recognized price hikes (StreamBee 199 → 249) while preserving cadence validity.</li>
+                  <div className="audit-highlights">
+                    <h3>Cases covered by the benchmark</h3>
+                    <ul>
+                      <li><strong>Changing merchant names:</strong> CLDNST DIGITAL and CLOUDNEST RENEWAL remain linked without merging separate price tiers.</li>
+                      <li><strong>One-off purchases:</strong> A FITTRAIL single purchase stays separate from annual recurring charges.</li>
+                      <li><strong>Trial charges:</strong> A ₹1 SafeVault token charge is followed through to regular billing.</li>
+                      <li><strong>Price changes:</strong> StreamBee’s ₹199 to ₹249 increase is flagged while the monthly cadence remains intact.</li>
                     </ul>
                   </div>
                 </div>
+              )}
+              {!evaluation && !loading && (
+                <EmptyState text="No benchmark results are available for these records." />
               )}
             </section>
           )}
 
           <footer className="footer">
-            <span>FinSight · Built for recurring payment transparency</span>
-            <span><ShieldCheck size={14} /> Synthetic demo data · Not financial advice</span>
+            Synthetic records only. Detected patterns are estimates, not proof of an active payment mandate.
           </footer>
         </div>
       </main>
 
       {selected && (
-        <div className="modal-backdrop" onClick={() => setSelected(null)}>
-          <div className="detail-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-backdrop" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) setSelected(null)
+        }}>
+          <section
+            className="detail-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="detail-title"
+          >
             <div className="modal-header">
-              <div className="brand-icon"><RefreshCw size={20} /></div>
+              <p>Pattern record</p>
               <button
                 className="icon-button"
                 onClick={() => setSelected(null)}
                 aria-label="Close details"
+                ref={closeButtonRef}
+                type="button"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <div className="eyebrow">DETECTED PATTERN</div>
-            <h2>{commitmentName(selected)}</h2>
+            <h2 id="detail-title">{commitmentName(selected)}</h2>
             <p className="modal-description">
               This pattern was inferred from transaction history. It does not
               establish whether a subscription or payment mandate is currently active.
@@ -751,7 +707,7 @@ export default function App() {
               </div>
             </div>
 
-            {selected.review_required && (
+            {Boolean(selected.review_required) && (
               <div className="review-detail-note">
                 <Bell size={18} />
                 <span>
@@ -773,27 +729,27 @@ export default function App() {
               </div>
             )}
 
-            {selected.cancellation_guidance && (
+            {selectedGuidance && (
               <div className="cancellation-card">
                 <div className="cancellation-header">
                   <div className="cancellation-badge">
                     <ShieldCheck size={16} />
-                    <span>Cancellation Guide ({selected.cancellation_guidance.mechanism})</span>
+                    <span>Cancellation guidance · {selectedGuidance.mechanism}</span>
                   </div>
-                  <span className="regulatory-tag">{selected.cancellation_guidance.regulatory_framework}</span>
+                  <span className="regulatory-tag">{selectedGuidance.regulatory_framework}</span>
                 </div>
-                <p className="cancellation-summary">{selected.cancellation_guidance.summary}</p>
+                <p className="cancellation-summary">{selectedGuidance.summary}</p>
                 <div className="cancellation-steps">
-                  <strong>Actionable Steps:</strong>
+                  <strong>What to do</strong>
                   <ol>
-                    {selected.cancellation_guidance.steps?.map((step: string, i: number) => (
+                    {selectedGuidance.steps?.map((step, i) => (
                       <li key={i}>{step}</li>
                     ))}
                   </ol>
                 </div>
-                {selected.cancellation_guidance.important_notes?.length > 0 && (
+                {selectedGuidance.important_notes && selectedGuidance.important_notes.length > 0 && (
                   <div className="cancellation-notes">
-                    {selected.cancellation_guidance.important_notes.map((note: string, i: number) => (
+                    {selectedGuidance.important_notes.map((note, i) => (
                       <p key={i}>• {note}</p>
                     ))}
                   </div>
@@ -815,37 +771,9 @@ export default function App() {
             >
               Done
             </button>
-          </div>
+          </section>
         </div>
       )}
-    </div>
-  )
-}
-
-function Metric({
-  title,
-  value,
-  icon,
-  detail,
-  tone,
-}: {
-  title: string
-  value: string
-  icon: React.ReactNode
-  detail: string
-  tone: string
-}) {
-  return (
-    <div className="metric-card">
-      <div className="metric-top">
-        <span>{title}</span>
-        <div className={`metric-icon ${tone}`}>{icon}</div>
-      </div>
-      <div className="metric-value">{value}</div>
-      <div className="metric-detail">
-        <span className="metric-dot" />
-        {detail}
-      </div>
     </div>
   )
 }
@@ -868,58 +796,68 @@ function CommitmentTable({
   confidenceFor: (item: AnyRecord) => string
 }) {
   if (loading && items.length === 0) {
-    return <div className="table-empty">Loading detected patterns…</div>
+    return (
+      <div className="table-loading" role="status" aria-label="Loading recurring patterns">
+        {[0, 1, 2].map((row) => (
+          <div className="skeleton-row" key={row} aria-hidden="true">
+            <span className="skeleton-marker" />
+            <span className="skeleton-line" />
+            <span className="skeleton-line short" />
+            <span className="skeleton-line medium" />
+          </div>
+        ))}
+      </div>
+    )
   }
 
   if (items.length === 0) {
     return (
-      <EmptyState text="No recurring candidates found. Check that detector output exists and the API returns commitments." />
+      <EmptyState text="No recurring patterns were detected in these records." />
     )
   }
 
   return (
     <div className="table-scroll">
-      <table>
+      <table aria-label="Detected recurring payment patterns">
         <thead>
           <tr>
-            <th>Merchant / descriptor</th>
-            <th>Cadence</th>
-            <th>Observed amount</th>
-            <th>Confidence</th>
-            <th>Review</th>
-            <th />
+            <th scope="col">Merchant / descriptor</th>
+            <th scope="col">Cadence</th>
+            <th scope="col">Observed amount</th>
+            <th scope="col">Confidence</th>
+            <th scope="col">Review</th>
+            <th scope="col"><span className="sr-only">Details</span></th>
           </tr>
         </thead>
         <tbody>
           {items.map((item, index) => (
             <tr key={String(item.commitment_id ?? item.id ?? `${nameFor(item)}-${index}`)}>
-              <td>
+              <td data-label="Merchant">
                 <div className="merchant-cell">
-                  <div className="merchant-icon"><CreditCard size={17} /></div>
                   <div>
                     <strong>{nameFor(item)}</strong>
-                    <span>Transaction pattern</span>
+                    <span>From transaction history</span>
                   </div>
                 </div>
               </td>
-              <td><span className="cadence-pill">{cadenceFor(item)}</span></td>
-              <td className="amount-cell">{money(amountFor(item))}</td>
-              <td>
+              <td data-label="Cadence"><span className="cadence-pill">{cadenceFor(item)}</span></td>
+              <td data-label="Observed amount" className="amount-cell">{money(amountFor(item))}</td>
+              <td data-label="Confidence">
                 <span className="confidence-pill">
                   <CheckCircle2 size={14} />
                   {confidenceFor(item)}
                 </span>
               </td>
-              <td>
+              <td data-label="Review">
                 {item.review_required ? (
                   <span className="review-pill">
                     {Number(item.review_transaction_count ?? 0)} flagged
                   </span>
                 ) : (
-                  <span className="no-review">—</span>
+                  <span className="no-review">Not flagged</span>
                 )}
               </td>
-              <td>
+              <td data-label="Details">
                 <button
                   className="row-button"
                   onClick={() => onSelect(item)}
@@ -939,7 +877,6 @@ function CommitmentTable({
 function EmptyState({ text }: { text: string }) {
   return (
     <div className="empty-state">
-      <div className="empty-icon"><Activity size={20} /></div>
       <p>{text}</p>
     </div>
   )

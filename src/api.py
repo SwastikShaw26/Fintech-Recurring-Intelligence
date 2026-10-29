@@ -38,6 +38,21 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def set_frontend_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+
+    # Vite's production asset names include a content hash, so they are safe to
+    # cache for a year. HTML stays revalidatable so a deploy picks up new hashes.
+    if path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif response.headers.get("content-type", "").startswith("text/html"):
+        response.headers["Cache-Control"] = "no-cache"
+
+    return response
+
+
 def read_csv(path: Path, required: bool = True) -> list[dict]:
     if not path.exists():
         if required:
