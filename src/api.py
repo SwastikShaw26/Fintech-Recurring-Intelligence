@@ -1,12 +1,13 @@
 
 import csv
 import hashlib
+import os
 from datetime import date
 from pathlib import Path
 from statistics import median
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Path as FastApiPath, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,19 +30,37 @@ app = FastAPI(
     version="1.2.0",
 )
 
+DEFAULT_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+env_origins = os.getenv("CORS_ALLOWED_ORIGINS")
+ALLOWED_ORIGINS = (
+    [orig.strip() for orig in env_origins.split(",") if orig.strip()]
+    if env_origins
+    else DEFAULT_ALLOWED_ORIGINS
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept"],
 )
 
 
 @app.middleware("http")
-async def set_frontend_cache_headers(request: Request, call_next):
+async def security_and_cache_headers(request: Request, call_next):
     response = await call_next(request)
     path = request.url.path
+
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
     # Vite's production asset names include a content hash, so they are safe to
     # cache for a year. HTML stays revalidatable so a deploy picks up new hashes.
@@ -459,7 +478,9 @@ def commitments_endpoint(
 
 
 @app.get("/api/commitments/{commitment_id}")
-def commitment_detail(commitment_id: str):
+def commitment_detail(
+    commitment_id: str = FastApiPath(..., min_length=1, max_length=50, pattern=r"^[a-zA-Z0-9_\-]+$")
+):
     matches = [
         item for item in load_commitments()
         if item["commitment_id"] == commitment_id
@@ -482,7 +503,10 @@ def commitment_detail(commitment_id: str):
 
 
 @app.get("/api/cancellation-guide/{payment_method}")
-def cancellation_guide_endpoint(payment_method: str, merchant: Optional[str] = Query(default=None)):
+def cancellation_guide_endpoint(
+    payment_method: str = FastApiPath(..., min_length=1, max_length=50, pattern=r"^[a-zA-Z0-9_\-\s%]+$"),
+    merchant: Optional[str] = Query(default=None, max_length=100)
+):
     """Return regulatory-backed cancellation guide for specific payment method."""
     return get_cancellation_guidance(payment_method, merchant or "Merchant")
 

@@ -105,3 +105,32 @@ def test_spa_root():
     response = client.get("/")
     assert response.status_code == 200
     assert "html" in response.headers.get("content-type", "")
+
+
+def test_security_headers():
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.headers.get("X-Content-Type-Options") == "nosniff"
+    assert response.headers.get("X-Frame-Options") == "DENY"
+    assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+
+
+def test_cors_origin_restriction():
+    # Allowed origin gets CORS header
+    res_allowed = client.get("/api/health", headers={"Origin": "http://localhost:5173"})
+    assert res_allowed.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+    # Disallowed origin does NOT get access-control-allow-origin
+    res_blocked = client.get("/api/health", headers={"Origin": "http://malicious-site.com"})
+    assert res_blocked.headers.get("access-control-allow-origin") is None
+
+
+def test_input_validation_rejection():
+    # Invalid direction
+    res_dir = client.get("/api/transactions?direction=invalid_direction")
+    assert res_dir.status_code == 422
+
+    # Malformed commitment ID pattern
+    res_cid = client.get("/api/commitments/c_test<script>")
+    assert res_cid.status_code == 422
+
