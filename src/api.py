@@ -1,33 +1,76 @@
 
+import asyncio
 import csv
 import hashlib
+import json
 import os
+import sqlite3
+from contextlib import asynccontextmanager
 from datetime import date
+from io import StringIO
 from pathlib import Path
 from statistics import median
 from typing import Optional
+from uuid import UUID, uuid4
 
-from fastapi import FastAPI, HTTPException, Path as FastApiPath, Query, Request
+from fastapi import FastAPI, HTTPException, Path as FastApiPath, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from src.cancellation_guide import get_cancellation_guidance
+from src.detect_recurring_v3 import detect, load_aliases
+from src.local_statement_store import (
+    DEFAULT_ACCOUNT, SavedStatementConflict, account_label, delete_statement, list_accounts, load_statement,
+    load_statements, save_statement,
+)
+from src.merchant_review import merchant_suggestions, validate_dismissals
+from src.transaction_review import review_signals
+from src.private_statement import (
+    MAX_REQUEST_BYTES, NORMALIZED_MAPPING, apply_statement_overlap, map_statement,
+    parse_statement, plan_statement_overlap, reconcile_refunds,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 TRANSACTIONS_FILE = ROOT / "data" / "raw" / "synthetic_transactions.csv"
 LABELS_FILE = ROOT / "data" / "raw" / "ground_truth_labels.csv"
 
 # Prefer v3 detector output; retain v2 as a fallback.
-CANDIDATES_V3_FILE = ROOT / "data" / "processed" / "recurring_candidates_v3.csv"
-CANDIDATES_V2_FILE = ROOT / "data" / "processed" / "recurring_candidates.csv"
-PREDICTIONS_FILE = ROOT / "data" / "processed" / "transaction_predictions.csv"
-FRONTEND_DIST = ROOT / "frontend" / "dist"
+PROCESSED_DIR = Path(os.getenv("FINSIGHT_PROCESSED_DIR", str(ROOT / "data" / "processed")))
+CANDIDATES_V3_FILE = PROCESSED_DIR / "recurring_candidates_v3.csv"
+CANDIDATES_V2_FILE = PROCESSED_DIR / "recurring_candidates.csv"
+PREDICTIONS_FILE = PROCESSED_DIR / "transaction_predictions.csv"
+FRONTEND_DIST = Path(os.getenv("FINSIGHT_FRONTEND_DIST", str(ROOT / "frontend" / "dist")))
+HOSTED_BODY_TIMEOUT_SECONDS = 15
+
+
+@asynccontextmanager
+async def lifespan(application):
+    if os.getenv("FINSIGHT_DEPLOYMENT_MODE") != "hosted":
+        yield
+        return
+    from src.hosted_api import load_hosted_runtime, run_retention
+
+    runtime = await run_in_threadpool(load_hosted_runtime)
+    application.state.hosted = runtime
+    stop_retention = asyncio.Event()
+    retention_task = asyncio.create_task(run_retention(runtime.store, stop_retention))
+    try:
+        yield
+    finally:
+        del application.state.hosted
+        stop_retention.set()
+        try:
+            await retention_task
+        finally:
+            await run_in_threadpool(runtime.store.engine.dispose)
+
 
 app = FastAPI(
     title="FinSight API",
     description="Recurring payment intelligence using synthetic transaction data.",
     version="1.2.0",
+    lifespan=lifespan,
 )
 
 DEFAULT_ALLOWED_ORIGINS = [
@@ -64,7 +107,9 @@ async def security_and_cache_headers(request: Request, call_next):
 
     # Vite's production asset names include a content hash, so they are safe to
     # cache for a year. HTML stays revalidatable so a deploy picks up new hashes.
-    if path.startswith("/assets/"):
+    if path == "/api" or path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    elif path.startswith("/assets/") and response.status_code < 400:
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     elif response.headers.get("content-type", "").startswith("text/html"):
         response.headers["Cache-Control"] = "no-cache"
@@ -165,8 +210,10 @@ def load_predictions() -> dict:
 
 
 def load_transactions() -> list[dict]:
-    rows = read_csv(TRANSACTIONS_FILE)
-    predictions = load_predictions()
+    return enrich_transactions(read_csv(TRANSACTIONS_FILE), load_predictions())
+
+
+def enrich_transactions(rows, predictions) -> list[dict]:
     result = []
 
     for row in rows:
@@ -207,15 +254,21 @@ def load_transactions() -> list[dict]:
                     else None
                 )
             ),
-            "detector_evidence": prediction.get("detector_evidence", ""),
+            "detector_evidence": prediction.get("detector_evidence", prediction.get("evidence", "")),
         })
 
     return result
 
 
 def load_commitments() -> list[dict]:
-    transactions = load_transactions()
-    candidate_rows = read_csv(candidates_file())
+    return build_commitments(load_transactions(), read_csv(candidates_file()))
+
+
+def amount_label(amount, currency):
+    return f"{amount:.2f} statement units" if currency == "unspecified" else f"{currency} {amount:.2f}"
+
+
+def build_commitments(transactions, candidate_rows, currency="INR") -> list[dict]:
 
     candidate_tx_map = {}
     description_tx_map = {}
@@ -249,7 +302,7 @@ def load_commitments() -> list[dict]:
             continue
 
         key = normalized(description)
-        commitment_id = make_commitment_id(cand_id, description, cadence)
+        commitment_id = row.get("commitment_id") or make_commitment_id(cand_id, description, cadence)
 
         if commitment_id in seen:
             continue
@@ -316,7 +369,7 @@ def load_commitments() -> list[dict]:
             )
         if amount_values:
             evidence.append(
-                f"Median observed debit amount: INR {median(amount_values):.2f}."
+                f"Median observed debit amount: {amount_label(median(amount_values), currency)}."
             )
         if evidence_text:
             evidence.append(evidence_text)
@@ -346,9 +399,12 @@ def load_commitments() -> list[dict]:
             "transaction_count": count,
             "first_observed_date": dates[0] if dates else None,
             "last_observed_date": dates[-1] if dates else None,
+            "billing_anchor_day": as_int(row.get("billing_anchor_day")),
+            "billing_anchor_date": row.get("billing_anchor_date") or None,
+            "amount_pattern": row.get("amount_pattern") or None,
             "typical_amount": median(amount_values) if amount_values else None,
             "estimated_annual_cost": annual_cost,
-            "currency": "INR",
+            "currency": currency,
             "review_required": bool(flagged_transactions),
             "review_transaction_count": len(flagged_transactions),
             "evidence": evidence,
@@ -373,8 +429,22 @@ def health():
 @app.get("/api/summary")
 def summary():
     transactions = load_transactions()
-    commitments = load_commitments()
+    return build_summary(transactions, load_commitments())
 
+
+@app.get("/api/ready")
+def readiness(request: Request):
+    assets = (TRANSACTIONS_FILE, CANDIDATES_V3_FILE, PREDICTIONS_FILE, FRONTEND_DIST / "index.html")
+    if not all(path.is_file() for path in assets):
+        raise HTTPException(status_code=503, detail="FinSight demo assets are unavailable.")
+    if os.getenv("FINSIGHT_DEPLOYMENT_MODE") == "hosted":
+        runtime = getattr(request.app.state, "hosted", None)
+        if runtime is None or not runtime.database_ready():
+            raise HTTPException(status_code=503, detail="Hosted storage is unavailable.")
+    return {"status": "ready"}
+
+
+def build_summary(transactions, commitments, mode="synthetic", currency="INR"):
     debit_count = sum(tx["direction"] == "debit" for tx in transactions)
     known_estimates = [
         item["estimated_annual_cost"]
@@ -394,8 +464,8 @@ def summary():
         "review_required_commitment_count": sum(
             item["review_required"] for item in commitments
         ),
-        "currency": "INR",
-        "data_mode": "synthetic",
+        "currency": currency,
+        "data_mode": mode,
     }
 
 
@@ -513,12 +583,15 @@ def cancellation_guide_endpoint(
 
 @app.get("/api/alerts")
 def alerts_endpoint():
+    return build_alerts(load_transactions(), load_commitments())
+
+
+def build_alerts(transactions, commitments, currency="INR"):
     """
     Conservative review suggestions based on observed transaction evidence.
     They do not prove a subscription is active or cancelled.
     """
-    alerts = []
-    transactions = load_transactions()
+    alerts = review_signals(transactions, commitments, lambda amount: amount_label(amount, currency))
 
     for tx in transactions:
         if tx["direction"] != "debit" or not tx["review_required"]:
@@ -532,7 +605,7 @@ def alerts_endpoint():
             "title": f"Review unusual amount: {tx['description']}",
             "evidence": [
                 tx["review_reason"],
-                f"Observed transaction amount: INR {abs(tx['amount']):.2f}.",
+                f"Observed transaction amount: {amount_label(abs(tx['amount']), currency)}.",
                 f"Transaction date: {tx['date']}.",
             ],
             "recommended_action": (
@@ -542,7 +615,7 @@ def alerts_endpoint():
             "confirmed": False,
         })
 
-    for item in load_commitments():
+    for item in commitments:
         if item["cadence"] == "irregular":
             alerts.append({
                 "alert_id": f"review_{item['commitment_id']}",
@@ -562,6 +635,237 @@ def alerts_endpoint():
             })
 
     return {"total": len(alerts), "items": alerts}
+
+
+def analyze_statement(payload):
+    if not isinstance(payload, dict):
+        raise ValueError("Choose a UTF-8 CSV statement.")
+    columns, rows = parse_statement(payload.get("csv"))
+    if "mapping" not in payload:
+        return {
+            "columns": columns, "row_count": len(rows),
+            "sample": [[value[:160] for value in row] for _, row in rows[:5]],
+        }
+    currency = payload.get("currency", "INR")
+    if currency not in ("INR", "GBP", "USD", "EUR", "unspecified"):
+        raise ValueError("Choose a supported statement currency or leave it unspecified.")
+    raw = map_statement(columns, rows, payload["mapping"], currency)
+    duplicate_rows = 0
+    excluded_rows = 0
+    if "overlap_csv" in payload:
+        if payload.get("overlap_confirmed") is not True:
+            raise ValueError("Confirm both exports cover complete days from the same account.")
+        prior_columns, prior_rows = parse_statement(payload["overlap_csv"])
+        existing = map_statement(prior_columns, prior_rows, NORMALIZED_MAPPING, currency)
+        additions, review = plan_statement_overlap(existing, raw)
+        if payload.get("overlap_preview") is True:
+            return {"overlap_review": review}
+        excluded = payload.get("overlap_excluded", [])
+        raw, duplicate_rows = apply_statement_overlap(existing, additions, review, excluded)
+        excluded_rows = len(excluded)
+    alias_pairs = payload.get("aliases", [])
+    if not isinstance(alias_pairs, list) or len(alias_pairs) > 100:
+        raise ValueError("Use at most 100 merchant links.")
+    descriptors = {tx["description"].upper(): tx["description"] for tx in raw if tx["direction"] == "debit"}
+    aliases = {}
+    for pair in alias_pairs:
+        if not isinstance(pair, list) or len(pair) != 2 or not all(isinstance(item, str) for item in pair):
+            raise ValueError("Each merchant link must identify two statement descriptors.")
+        source, target = (item.strip().upper() for item in pair)
+        if source == target or source in aliases or source not in descriptors or target not in descriptors:
+            raise ValueError("Link two distinct debit descriptors from the current statement.")
+        aliases[source] = target
+    if aliases.keys() & set(aliases.values()):
+        raise ValueError("Link each variant directly to the descriptor you want to keep.")
+    dismissals = validate_dismissals(payload.get("merchant_dismissals", []), descriptors)
+    try:
+        analysis_id = str(UUID(payload["analysis_id"])) if "analysis_id" in payload else str(uuid4())
+    except (ValueError, TypeError, AttributeError):
+        raise ValueError("Invalid statement session identifier.") from None
+    candidates, predictions = detect(
+        [tx for tx in raw if tx["direction"] == "debit"], aliases, namespace=f"private-{analysis_id}", currency=currency
+    )
+    for candidate in candidates:
+        target = aliases.get(candidate["description"].upper())
+        if target:
+            candidate["description"] = descriptors[target]
+    transactions = enrich_transactions(raw, predictions)
+    refunds = reconcile_refunds(raw, aliases)
+    for transaction in transactions:
+        transaction.update(refunds.get(transaction["transaction_id"], {}))
+    commitments = build_commitments(transactions, candidates, currency)
+    return {
+        "transactions": transactions,
+        "commitments": commitments,
+        "summary": build_summary(transactions, commitments, "private", currency),
+        "alerts": build_alerts(transactions, commitments, currency)["items"],
+        "analysis_id": analysis_id,
+        "merchant_links": alias_pairs,
+        "merchant_dismissals": dismissals,
+        "merchant_suggestions": merchant_suggestions(descriptors, aliases, dismissals, load_aliases()),
+        "duplicate_rows": duplicate_rows,
+        "overlap_excluded_rows": excluded_rows,
+    }
+
+
+@app.post("/api/private-statement")
+async def private_statement(request: Request):
+    if os.getenv("FINSIGHT_DEPLOYMENT_MODE", "local") != "local":
+        raise HTTPException(status_code=404, detail="Private import is available in local mode.")
+    host = request.url.hostname
+    origin = request.headers.get("origin")
+    same_origin = f"{request.url.scheme}://{request.url.netloc}"
+    if host not in {"localhost", "127.0.0.1", "::1"} or origin not in {same_origin, *DEFAULT_ALLOWED_ORIGINS}:
+        raise HTTPException(status_code=403, detail="Private analysis is available from local FinSight only.")
+    payload = await read_statement_request(request)
+    try:
+        return await run_in_threadpool(analyze_statement, payload)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+
+
+async def read_statement_request(request):
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+        raise HTTPException(status_code=415, detail="Expected a JSON statement request.")
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_REQUEST_BYTES:
+            raise HTTPException(status_code=413, detail="The statement exceeds the import limit.")
+        body.extend(chunk)
+    try:
+        return json.loads(body)
+    except (ValueError, RecursionError):
+        raise HTTPException(status_code=422, detail="Invalid statement request.") from None
+
+
+def local_account_overview(path, accounts):
+    if not isinstance(accounts, list) or not 1 <= len(accounts) <= 8:
+        raise ValueError("Choose between 1 and 8 saved accounts.")
+    keys = dict.fromkeys(account_label(label).casefold() for label in accounts)
+    saved = load_statements(path, keys)
+    if len(saved) != len(keys):
+        raise HTTPException(status_code=404, detail="A selected account is no longer saved. Refresh the account list.")
+    items = []
+    totals = {}
+    fields = ("transaction_count", "detected_pattern_count", "annual_estimate_count", "estimated_annual_cost")
+    for key in keys:
+        label, statement = saved[key]
+        summary = analyze_statement(statement)["summary"]
+        items.append({"account": label, "summary": summary})
+        currency = summary["currency"]
+        if currency == "unspecified":
+            continue
+        total = totals.setdefault(currency, {"currency": currency, **dict.fromkeys(fields, 0)})
+        for field in fields:
+            total[field] += summary[field]
+    for total in totals.values():
+        total["estimated_annual_cost"] = round(total["estimated_annual_cost"], 2)
+    return {"accounts": items, "totals": list(totals.values())}
+
+
+def local_statement_action(path, payload):
+    if not isinstance(payload, dict):
+        raise ValueError("Choose a saved statement action.")
+    action = payload.get("action")
+    if action == "list":
+        return {"accounts": list_accounts(path)}
+    if action == "overview":
+        return local_account_overview(path, payload.get("accounts"))
+    account = account_label(payload.get("account", DEFAULT_ACCOUNT))
+    if action == "load":
+        saved = load_statement(path, account)
+        if saved is None:
+            raise HTTPException(status_code=404, detail="No statement has been saved.")
+        label, statement = saved
+        return {**analyze_statement(statement), "local_account": label}
+    if action == "delete":
+        delete_statement(path, account)
+        return {"deleted": True, "accounts": list_accounts(path)}
+    if action != "save":
+        raise ValueError("Choose a saved statement action.")
+    statement = payload.get("statement")
+    if not isinstance(statement, dict) or "mapping" not in statement:
+        raise ValueError("Analyze a mapped statement before saving.")
+    result = analyze_statement(statement)
+    label = save_statement(path, account, statement_snapshot(result))
+    return {**result, "local_account": label}
+
+
+def statement_snapshot(result):
+    output = StringIO(newline="")
+    fields = list(NORMALIZED_MAPPING)
+    writer = csv.writer(output)
+    writer.writerow(fields)
+    writer.writerows([row[field] for field in fields] for row in result["transactions"])
+    return {
+        "csv": output.getvalue(),
+        "mapping": NORMALIZED_MAPPING,
+        "currency": result["summary"]["currency"],
+        "aliases": result["merchant_links"],
+        "merchant_dismissals": result["merchant_dismissals"],
+        "analysis_id": result["analysis_id"],
+    }
+
+
+@app.post("/api/local-statement")
+async def local_statement(request: Request):
+    if os.getenv("FINSIGHT_DEPLOYMENT_MODE", "local") != "local":
+        raise HTTPException(status_code=404, detail="Saved statements are available in local mode.")
+    loopback = {"localhost", "127.0.0.1", "::1"}
+    same_origin = f"{request.url.scheme}://{request.url.netloc}"
+    if (
+        request.url.hostname not in loopback
+        or not request.client or request.client.host not in loopback
+        or request.headers.get("origin") != same_origin
+    ):
+        raise HTTPException(status_code=403, detail="Use the same-origin local FastAPI app for saved statements.")
+    configured = os.getenv("FINSIGHT_LOCAL_DB")
+    path = Path(configured).expanduser() if configured else None
+    if not path or not path.is_absolute() or path.resolve().is_relative_to(ROOT):
+        raise HTTPException(status_code=503, detail="Set FINSIGHT_LOCAL_DB to an absolute database path outside the project.")
+    payload = await read_statement_request(request)
+    try:
+        return await run_in_threadpool(local_statement_action, path.resolve(), payload)
+    except SavedStatementConflict:
+        raise HTTPException(status_code=409, detail="This account has a different saved statement, or this analysis belongs to another account.") from None
+    except (OSError, sqlite3.Error):
+        raise HTTPException(status_code=503, detail="The local statement database is unavailable.") from None
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+
+
+def hosted_runtime(request):
+    if os.getenv("FINSIGHT_DEPLOYMENT_MODE") != "hosted":
+        raise HTTPException(status_code=404, detail="Hosted statements are available in hosted mode.")
+    runtime = getattr(request.app.state, "hosted", None)
+    if runtime is None:
+        raise HTTPException(status_code=503, detail="Hosted storage is unavailable.")
+    return runtime
+
+
+@app.post("/api/hosted-session")
+async def create_hosted_session(request: Request):
+    return await hosted_runtime(request).exchange(request)
+
+
+@app.delete("/api/hosted-session", status_code=204)
+async def revoke_hosted_session(request: Request):
+    runtime = hosted_runtime(request)
+    await runtime.session_call(runtime.store.revoke_session, runtime.bearer_digest(request))
+    return Response(status_code=204)
+
+
+@app.post("/api/hosted-statement")
+async def hosted_statement(request: Request):
+    runtime = hosted_runtime(request)
+    owner = await runtime.authenticate(request)
+    with runtime.admit(owner):
+        try:
+            async with asyncio.timeout(HOSTED_BODY_TIMEOUT_SECONDS):
+                payload = await read_statement_request(request)
+        except TimeoutError:
+            raise HTTPException(status_code=408, detail="Timed out receiving the hosted request.") from None
+        return await run_in_threadpool(runtime.statement_action, owner, payload, analyze_statement, statement_snapshot)
 
 
 @app.get("/api/evaluation")
@@ -629,20 +933,7 @@ def evaluation_metrics():
     }
 
 
-# Serve React SPA from frontend/dist if available
+# The app uses in-page navigation. StaticFiles serves the index at the root and
+# constrains all other file lookups to this directory, including symlink targets.
 if FRONTEND_DIST.exists():
-    assets_dir = FRONTEND_DIST / "assets"
-    if assets_dir.exists():
-        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
-
-    @app.get("/{full_path:path}")
-    async def serve_spa(request: Request, full_path: str):
-        if full_path.startswith("api") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
-            raise HTTPException(status_code=404, detail="Not Found")
-        file_path = FRONTEND_DIST / full_path
-        if file_path.is_file():
-            return FileResponse(file_path)
-        index_file = FRONTEND_DIST / "index.html"
-        if index_file.exists():
-            return FileResponse(index_file)
-        raise HTTPException(status_code=404, detail="Index file not found")
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")

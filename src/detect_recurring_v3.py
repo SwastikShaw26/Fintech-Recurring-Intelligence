@@ -1,6 +1,9 @@
 
 import csv
+import hashlib
 import json
+import os
+from calendar import monthrange
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
@@ -8,7 +11,7 @@ from statistics import median
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = ROOT / "data" / "raw"
-PROCESSED_DIR = ROOT / "data" / "processed"
+PROCESSED_DIR = Path(os.getenv("FINSIGHT_PROCESSED_DIR", str(ROOT / "data" / "processed")))
 CONFIG_DIR = ROOT / "config"
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -66,36 +69,102 @@ def classify_intervals(intervals):
     return None
 
 
-def split_streams(rows: list[dict]) -> list[list[dict]]:
-    """
-    Separate independent price tiers under the same merchant (e.g. 599 vs 899 quarterly)
-    while preserving trial-to-paid sequences (e.g. 1 INR trial + 499 monthly)
-    and price changes (199 -> 249).
-    """
-    if len(rows) <= 3:
+def calendar_cadence(dates, required_cadence=None):
+    """Find repeated calendar slots within three days, allowing one missed slot per gap."""
+    first = dates[0]
+    start_month = first.year * 12 + first.month - 1
+    best = None, 0.0, None, None
+    best_error = float("inf")
+    for cadence, period in (("monthly", 1), ("quarterly", 3), ("annual", 12)):
+        if required_cadence and cadence != required_cadence:
+            continue
+        for anchor in range(max(1, first.day - 3), min(31, first.day + 3) + 1):
+            previous = 0
+            matched = 1
+            consecutive = 0
+            error = abs(first.day - min(anchor, monthrange(first.year, first.month)[1]))
+            last_slot = None
+            for observed in dates[1:]:
+                for slot in (previous + 1, previous + 2):
+                    year, month = divmod(start_month + slot * period, 12)
+                    if year > 9999:
+                        continue
+                    month += 1
+                    expected = date(year, month, min(anchor, monthrange(year, month)[1]))
+                    if abs((observed - expected).days) <= 3:
+                        error += abs((observed - expected).days)
+                        consecutive += slot == previous + 1
+                        previous = slot
+                        matched += 1
+                        last_slot = expected
+                        break
+            coverage = (matched - 1) / (len(dates) - 1)
+            if matched >= 3 and consecutive and coverage >= 0.75 and (coverage, -error) > (best[1], -best_error):
+                best = cadence, coverage, anchor, last_slot
+                best_error = error
+    return best
+
+
+def regular_timing(dates, calendar):
+    if len(dates) < 3:
+        return None, 0.0, False
+    intervals = [(current - previous).days for previous, current in zip(dates, dates[1:])]
+    cadence = classify_intervals(intervals)
+    if cadence is not None:
+        low, high = CADENCES[cadence]
+        matches = sum(low <= gap <= high for gap in intervals)
+        if matches >= 2 and matches * 2 >= len(intervals):
+            return cadence, matches / len(intervals), False
+    if calendar:
+        cadence, consistency, _, _ = calendar_cadence(dates)
+        return cadence, consistency, cadence is not None
+    return None, 0.0, False
+
+
+def split_streams(rows: list[dict], calendar=True) -> list[list[dict]]:
+    """Split exact price bands only when each has a regular schedule and their histories overlap."""
+    by_amount = defaultdict(list)
+    for row in rows:
+        by_amount[row["amount"]].append(row)
+    if len(by_amount) < 2:
         return [rows]
-
-    amounts = [r["amount"] for r in rows]
-    distinct_amounts = sorted(list(set(amounts)))
-
-    # A nominal charge (<= 10 INR) is a trial verification charge preceding subscriptions.
-    if distinct_amounts[0] <= 10.0:
+    dates = [row["date"] for row in rows]
+    pooled_cadence, _, _ = regular_timing(dates, calendar)
+    if pooled_cadence and all(
+        (current - previous).days >= CADENCES[pooled_cadence][0] - 3
+        for previous, current in zip(dates, dates[1:])
+    ):
         return [rows]
+    regular = {
+        amount: tier for amount, tier in by_amount.items()
+        if regular_timing([row["date"] for row in tier], calendar)[0]
+    }
+    overlapping = {
+        amount for amount, tier in regular.items()
+        if any(
+            amount != other and tier[0]["date"] <= band[-1]["date"] and band[0]["date"] <= tier[-1]["date"]
+            for other, band in regular.items()
+        )
+    }
+    if not overlapping:
+        return [rows]
+    tiers = [regular[amount] for amount in sorted(overlapping)]
+    remainder = [row for row in rows if row["amount"] not in overlapping]
+    return [*tiers, remainder] if remainder else tiers
 
-    # If there are two widely separated amount tiers (>30% difference) that each have
-    # multiple observations, they represent separate subscriptions under the same merchant.
-    if len(distinct_amounts) == 2 and distinct_amounts[1] / distinct_amounts[0] > 1.3:
-        c1 = [r for r in rows if abs(r["amount"] - distinct_amounts[0]) < 10]
-        c2 = [r for r in rows if abs(r["amount"] - distinct_amounts[1]) < 10]
-        if len(c1) >= 3 or len(c2) >= 3:
-            return [c for c in [c1, c2] if c]
 
-    return [rows]
+def sustained_price_step(amounts):
+    """Recognize a single change between two stable prices with repeated evidence on both sides."""
+    earlier, recent = amounts[0], amounts[-1]
+    return (
+        earlier != recent
+        and amounts.count(earlier) >= 2
+        and amounts.count(recent) >= 2
+        and amounts == [earlier] * amounts.count(earlier) + [recent] * amounts.count(recent)
+    )
 
 
-def main():
-    transactions = read_transactions()
-    aliases = load_aliases()
+def detect(transactions, aliases, namespace="demo-v1", *, calendar=True, currency="INR"):
     groups = defaultdict(list)
 
     # Group by resolved merchant or normalized description.
@@ -109,11 +178,13 @@ def main():
 
     for merchant_key, m_rows in groups.items():
         # Separate parallel streams/price tiers if present.
-        streams = split_streams(m_rows)
+        m_rows.sort(key=lambda row: (row["date"], row["transaction_id"]))
+        streams = split_streams(m_rows, calendar)
 
         for rows in streams:
-            rows.sort(key=lambda row: row["date"])
-
+            tier = float(rows[0]["amount"]).hex() if len(streams) > 1 else None
+            identity = json.dumps([namespace, merchant_key, tier], ensure_ascii=False)
+            commitment_id = "c_" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
             intervals = [
                 (rows[i]["date"] - rows[i - 1]["date"]).days
                 for i in range(1, len(rows))
@@ -123,6 +194,7 @@ def main():
             typical_amount = median(amounts)
 
             cadence = None
+            calendar_fit = False
             interval_consistency = 0.0
             confidence = 0.0
             evidence = "Insufficient repeated timing evidence"
@@ -134,23 +206,9 @@ def main():
 
             # Check if this group exhibits recurring cadence
             if len(rows) >= 3:
-                cadence = classify_intervals(intervals)
-
-                if cadence is not None:
-                    low, high = CADENCES[cadence]
-                    matching_gaps = [
-                        gap for gap in intervals
-                        if low <= gap <= high
-                    ]
-                    interval_consistency = (
-                        len(matching_gaps) / len(intervals)
-                    )
-
-                    if (
-                        len(matching_gaps) < 2
-                        or interval_consistency < 0.5
-                    ):
-                        cadence = None
+                cadence, interval_consistency, calendar_fit = regular_timing(
+                    [row["date"] for row in rows], calendar
+                )
 
                 amount_pattern = (
                     "variable" if amount_spread > 0.05
@@ -184,7 +242,7 @@ def main():
                     evidence = (
                         f"{len(rows)} transactions; "
                         f"median gap {median(intervals):.1f} days; "
-                        f"{interval_consistency:.0%} intervals fit {cadence}; "
+                        f"{interval_consistency:.0%} {'calendar slots' if calendar_fit else 'intervals'} fit {cadence}; "
                         f"amount spread {amount_spread:.1%}"
                     )
 
@@ -199,6 +257,14 @@ def main():
                 descriptor_counts[r["description"]] += 1
             primary_description = max(descriptor_counts, key=descriptor_counts.get)
 
+            price_step = cadence in CADENCES and all(intervals) and sustained_price_step(amounts)
+            trial_id = None
+            if (currency == "INR" and cadence in CADENCES and len(rows) >= 4
+                    and 0 < amounts[0] <= 10 and 0 < intervals[0] <= 31
+                    and len(set(amounts[1:])) == 1 and amounts[1] >= 5 * amounts[0]
+                    and regular_timing([row["date"] for row in rows[1:]], calendar)[0] == cadence):
+                trial_id = rows[0]["transaction_id"]
+
             # Predict and flag each transaction individually.
             for row in rows:
                 amount_deviation = (
@@ -210,13 +276,10 @@ def main():
                     amount_deviation > AMOUNT_OUTLIER_THRESHOLD
                 )
 
-                # An individual transaction within an established group is non-recurring
-                # if it has a severe amount deviation (>30%) and is NOT a nominal trial (<=10)
-                # and doesn't fit the timing cadence.
                 is_recurring_txn = bool(cadence)
-                if cadence in CADENCES and len(rows) >= 4 and row["amount"] > 10.0:
-                    if amount_deviation > 0.30:
-                        is_recurring_txn = False
+                if (cadence in CADENCES and len(rows) >= 4 and amount_deviation > 0.30
+                        and not price_step and row["transaction_id"] != trial_id):
+                    is_recurring_txn = False
 
                 review_required = bool(
                     (is_recurring_txn and amount_outlier)
@@ -255,13 +318,22 @@ def main():
                 if not recurring_rows:
                     continue
 
+                anchor_day, anchor_date = None, None
+                if calendar and cadence in CADENCES and len(recurring_rows) >= 3:
+                    _, _, fitted_day, fitted_date = calendar_cadence([row["date"] for row in recurring_rows], cadence)
+                    if fitted_date and abs((recurring_rows[-1]["date"] - fitted_date).days) <= 3:
+                        anchor_day, anchor_date = fitted_day, fitted_date.isoformat()
+
                 candidates.append({
                     "candidate_id": candidate_id,
+                    "commitment_id": commitment_id,
                     "description": primary_description,
                     "transaction_count": len(recurring_rows),
                     "first_seen": recurring_rows[0]["date"].isoformat(),
                     "last_seen": recurring_rows[-1]["date"].isoformat(),
                     "detected_cadence": cadence,
+                    "billing_anchor_day": anchor_day,
+                    "billing_anchor_date": anchor_date,
                     "median_amount": round(typical_amount, 2),
                     "amount_pattern": amount_pattern,
                     "interval_consistency": round(
@@ -271,9 +343,16 @@ def main():
                     "evidence": evidence,
                 })
 
+    return candidates, predictions
+
+
+def main():
+    transactions = read_transactions()
+    candidates, predictions = detect(transactions, load_aliases())
     candidate_fields = [
-        "candidate_id", "description", "transaction_count",
+        "candidate_id", "commitment_id", "description", "transaction_count",
         "first_seen", "last_seen", "detected_cadence",
+        "billing_anchor_day", "billing_anchor_date",
         "median_amount", "amount_pattern", "interval_consistency",
         "heuristic_confidence", "evidence",
     ]

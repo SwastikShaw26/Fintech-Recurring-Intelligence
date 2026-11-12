@@ -1,15 +1,14 @@
 
 # FinSight — Product Data Contract
 
-Version: 1.0
-Status: Initial prototype
+Status: Local statement analysis and opt-in hosted pilot, reviewed 12 November 2026
 
 ## 1. Purpose
 
 Define the shared data structures used by the detection engine,
 Python backend, React frontend, and automated tests.
 
-All initial transaction data is synthetic.
+Bundled transaction fixtures are synthetic. Private imports use mapped fields from user-selected statements and have no ground-truth labels.
 
 ## 2. Transaction
 
@@ -61,8 +60,8 @@ one recurring payment obligation.
 | status | string | candidate, needs_review, or supported_pattern |
 | confidence_score | number or null | Heuristic score; not automatically a probability |
 | transaction_ids | array of strings | Supporting transaction identifiers |
-| first_observed_date | date | First supporting transaction |
-| last_observed_date | date | Most recent supporting transaction |
+| first_observed_date | date or null | First supporting transaction |
+| last_observed_date | date or null | Most recent supporting transaction |
 | typical_amount | number or null | Median observed debit amount |
 | currency | string | INR for the initial synthetic dataset |
 | evidence | array of strings | Reasons supporting the inference |
@@ -111,7 +110,7 @@ Rules:
 - Invalid input returns a clear error response.
 - Prediction endpoints must not accept ground-truth labels as model inputs.
 
-Initial planned endpoints:
+Current FastAPI endpoints:
 
 - GET /api/health
 - GET /api/summary
@@ -119,6 +118,10 @@ Initial planned endpoints:
 - GET /api/commitments
 - GET /api/commitments/{commitment_id}
 - GET /api/alerts
+- GET /api/cancellation-guide/{payment_method}
+- GET /api/evaluation (original synthetic regression)
+
+The benchmark dashboard imports the separate generated challenge JSON. The browser computes milestone projections from `last_observed_date` and regular cadence and stores checklist progress separately from API commitment status. Existing commitment IDs are backend-specific and depend on candidate numbering. The Node demo adapter has known differences in defaults and aggregation.
 
 ## 8. Evaluation and privacy
 
@@ -126,3 +129,19 @@ Initial planned endpoints:
 - Report precision, recall, F1, and false positives/negatives.
 - Identify synthetic evaluation results as synthetic.
 - Do not collect real banking credentials or claim live bank integration.
+
+## 9. Private statement analysis
+
+`POST /api/private-statement` is available through loopback FastAPI. A request containing `csv` returns headers, a sample, and row count. Add `mapping` with zero-based column indices to analyze. Date and description are required. Map either one amount column with an optional direction column or separate debit and credit columns. Choose the date format and, for signed amounts, the debit sign convention. Optional statement currency is INR, GBP, USD, EUR, or `unspecified` for source units. The importer performs no conversion.
+
+The analysis returns a summary, transactions, commitments, alerts, an analysis ID, and merchant links. The ID scopes private reanalysis and is not a server session or credential. The API retains no private dataset. Clearing the tab session discards its data and review state while leaving the original CSV on disk.
+
+For overlapping exports in the same private tab, the analysis request can carry `overlap_csv` with the current mapped records in date, description, amount, direction, payment-method order. Set `overlap_confirmed` only for complete-day exports from the same account and currency. The response includes `duplicate_rows`. The merge uses exact multiset matching and keeps debit and credit directions separate.
+
+### Optional SQLite persistence
+
+`POST /api/local-statement` accepts `action` values `save`, `load`, and `delete` through same-origin loopback FastAPI only. Enable it by configuring an absolute `FINSIGHT_LOCAL_DB` path outside the repository. Save requires a mapped private statement payload in `statement`. The backend stores the normalized mapped records and merchant links. Load reruns analysis with the saved analysis ID. Deletion removes the saved workspace and leaves the in-memory tab and source file under the user's control.
+
+### Billing projections
+
+Commitment responses can carry `billing_anchor_day` (1–31) and `billing_anchor_date` (the most recent fitted billing slot). The slot can differ from the last observed debit by up to three days. The browser advances from that slot with month-end clamping. If a fit is unavailable, projections use the observed posting date. `amount_pattern` describes observed amount variability and does not represent an uncertainty interval.

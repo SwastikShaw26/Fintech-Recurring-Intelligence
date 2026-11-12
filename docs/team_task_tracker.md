@@ -1,57 +1,24 @@
-﻿# Team Task Tracker
+# Team task tracker
 
-## Current owner
+Primary developer: Swastik Shaw.
 
-Primary developer: Swastik Shaw
-Additional teammate: expected to contribute later, primarily frontend and
-enhancements.
+## Verified local release
 
-## Phase 1 — Research and specification
+- [x] Synthetic statement and separate labels
+- [x] V3 detector, observed amount review, and debit-level baseline evaluator
+- [x] Transaction ledger, spending summary, and commitment detail workflow
+- [x] Provider-specific guidance and browser-local revocation checklist
+- [x] Subscription timeline and challenge benchmark explorer
 
-- [ ] Confirm full official T4.1 requirements and judging criteria
-- [ ] Research Indian recurring-payment and mandate mechanisms
-- [ ] Benchmark existing products using verifiable sources
-- [ ] Record technical research and source links
-- [ ] Finalise functional and non-functional requirements
-- [ ] Finalise dataset schema and edge-case matrix
+- [x] Canonical FastAPI build and clean-checkout smoke verification
+- [x] Stable commitment IDs and revocation-aware projections
+- [x] Calendar-aware detection and explicit merchant linking
+- [x] Private CSV import and end-to-end MoneyData verification
 
-## Phase 2 — Data and engine
+## Next decisions
 
-- [ ] Build deterministic synthetic data generator
-- [ ] Create separate ground-truth labels
-- [ ] Implement input validation
-- [ ] Implement merchant resolution
-- [ ] Implement recurrence baseline
-- [ ] Add annual and irregular detection tests
-- [ ] Add price-change and resumption tests
-- [ ] Run evaluation and document errors
+- [ ] Approve a feature from the [current roadmap](engineering/feature-roadmap.md)
+- [ ] Define and verify hosting controls before any external deployment
+- [ ] Produce submission assets and verify judging criteria separately
 
-## Phase 3 — Product
-
-- [ ] Add evidence-backed spending summaries
-- [ ] Add cancellation guidance
-- [ ] Verify a real-service cancellation journey
-- [ ] Decide whether Sarvam integration is useful
-- [ ] Decide whether Neo4j integration is justified
-- [ ] Define stable backend interfaces
-- [ ] Onboard teammate for frontend work
-
-## Phase 4 — Delivery
-
-- [ ] End-to-end testing
-- [ ] Setup guide and complete README
-- [ ] Public GitHub repository
-- [ ] Source archive
-- [ ] Prototype presentation
-- [ ] Optional demo video
-- [ ] Verify submission fields, sizes and deadlines
-- [ ] Track cohort requirements separately
-
-## Collaboration rules
-
-- Commit small, meaningful changes.
-- Document new dependencies and architectural decisions.
-- Agree on interfaces before parallel module development.
-- Never commit secrets or real financial data.
-- Record test commands and results.
-- Recheck official submission rules before delivery.
+Keep detection claims reproducible, use synthetic data for the demo, and record the evidence for each completed feature.

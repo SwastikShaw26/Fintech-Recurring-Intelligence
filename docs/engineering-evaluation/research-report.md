@@ -1,69 +1,30 @@
-# Technical Research Report: Recurring Payment Intelligence & Regulatory Standards
+# FinSight research refresh
 
-**Agent**: Agent A — Technical Researcher  
-**Skill**: `finsight-research`  
-**Date**: November 11, 2026  
-**Status**: Completed & Verified  
+Reviewed 12 November 2026. Recommendations below distinguish source findings from proposed FinSight experiments.
 
----
+## Regulatory and product boundaries
 
-## 1. Executive Summary
+- **Mandate guidance.** RBI/DPSS/2026-27/396, dated April 21, 2026, applies to recurring card, PPI and UPI transactions within its defined scope. Paragraph 4 requires the issuer to provide a withdrawal facility. Paragraph 11 repeals the listed prior circulars, including the August 2024 circular. Maintain provider-specific links, a review date and separate user-reported status. Route NACH users through separately verified bank guidance. An inferred recurrence or subsequent debit alone does not establish mandate status. [RBI Digital Payments – E-mandate Framework, 2026](https://rbi.org.in/scripts/FS_Notification.aspx?Id=13374&Mode=0&fn=9)
+- **Account Aggregator.** The November 28, 2025 directions, DoR.FIN.REC.No.287/03-10-123/2025-26, supersede the earlier directions. Paragraph 8(12) defines an FIU as an entity registered with and regulated by a financial sector regulator. Paragraphs 15–21 specify consent handling and 27–29 cover authorized use and FIU participation. The October 2026 RBI statement announced AA interoperability and consolidated statement changes expected by December 31, 2026. Treat that date as an announced target and verify implementation status with a prospective regulated partner. Keep the next experiment synthetic and document purpose, recipient, expiry and revocation before discussing live integration. [2025 RBI directions](https://www.rbi.org.in/scripts/BS_ViewMasDirections.aspx?id=12936) · [October 2026 RBI statement](https://rbi.org.in/scripts/BS_PressReleaseDisplay.aspx?prid=63743)
+- **Hosted privacy.** MeitY publishes the DPDP Rules, the corrigendum, and a separate Act commencement timeline. The notices phase provisions in at different times. Map applicable duties and dates with qualified review for the intended deployment. Engineering evidence should cover disclosure before file transfer, data minimization, user export and deletion, purge of expired data, backup expiry and recovery, and documented credential and key management. [MeitY rules and commencement notices](https://www.meity.gov.in/documents/act-and-policies/digital-personal-data-protection-rules-2025-gDOxUjMtQWa?pageTitle=Digital-Personal-Data-Protection-Rules-2025%3B)
+- **Isolation and telemetry.** PostgreSQL row policies can add defense in depth to the existing owner predicates. Table owners and privileged roles can bypass default policies, so verify a separate non-owner runtime role, transaction-scoped owner context, and connection reuse with two owners. Use bounded operational counters for request outcomes, latency and purge health. Exclude authorization headers, account data and request bodies. [PostgreSQL row security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html) · [OWASP logging guidance](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
 
-This research report investigates algorithmic alternatives for recurring payment detection, entity resolution strategies for raw transaction descriptors, financial forecasting methods, and the Indian regulatory framework governing automated debits. 
+## Detection and forecast experiments
 
-Our investigation confirms that while FinSight's current rule-based heuristic provides an interpretable starting point for synthetic benchmarks, it suffers from severe generalization limitations that prevent reliable real-world deployment. Modern fintech systems employ hybrid time-series signal processing (FFT / Autocorrelation) coupled with density-based clustering (DBSCAN / HDBSCAN) and probabilistic entity resolution.
+| Candidate | Fit for FinSight | Evidence required |
+| --- | --- | --- |
+| Calendar and amount heuristics | Keep as the reproducible baseline. Calendar slots encode month-end and missed-cycle behavior with sparse observations. | Compare date and amount errors, commitment recovery, coverage and false positives by cadence. Include incomplete statement ranges and variable amounts. |
+| FFT or autocorrelation | Useful comparison on longer, regularized sequences. Binning dates can erase posting drift and introduce zeros where data is actually missing. | Test by history length and known coverage, and compare against the current calendar baseline. |
+| Lomb–Scargle | Handles uneven sample times in periodic signal analysis. Sparse positive-only payment events are a different observation model, so periodogram peaks need independent validation. | Experimental only, on longer streams with a clear sampling design. [VanderPlas, 2018](https://doi.org/10.3847/1538-4365/AAB766) |
+| DBSCAN or HDBSCAN | A candidate for grouping descriptor or amount features when density and a meaningful distance can be established. Small or rare merchants can be left as noise or conflated. | Use merchant-disjoint splits and measure false merges and review workload at comparable recall. [Campello, Moulavi and Sander, 2013](https://doi.org/10.1007/978-3-642-37456-2_14) |
+| Probabilistic record linkage | Useful next model once labeled pairs exist. Combine independent descriptor evidence where reasonable and allow uncertain pairs to go to review. | Report pair coverage, false merges, false splits and accepted suggestions separately. Include look-alike negatives and previously unseen payment descriptors. [Fellegi and Sunter, 1969](https://doi.org/10.1080/01621459.1969.10501049) |
 
----
+Freeze a consented, independently labeled evaluation set before tuning. Split by merchant and account, then use rolling forecast origins with past-only evidence and known coverage windows. Report projected event precision and recall, date and amount error, and abstention coverage. Compare calibration by cadence and history length. The de-identified MoneyData run demonstrates ingestion at realistic volume, and its missing recurring-payment labels prevent accuracy estimates. The existing blinded synthetic suite produced no merchant suggestions, leaving suggestion precision undefined. [Tashman, 2000](https://www.sciencedirect.com/science/article/pii/S0169207000000650) · [FinSight implementation evidence](../engineering/implementation-log.md)
 
-## 2. Research Dimensions & Detailed Findings
+**Research decision.** Prioritize data coverage and merchant-label quality before model replacement. Evaluate a lightweight link ranker and rolling forecast baseline before considering heavier ML. Keep the evidence-linked assistant deterministic while testing which questions users actually need answered.
 
-### Dimension 1: Recurring Payment Detection Algorithms
-* **State of the Art in Fintech**:
-  Production-grade personal financial management (PFM) platforms (such as Plaid, MX, and Yodlee) address recurring detection as a multi-stage time-series clustering problem rather than a hardcoded interval lookup.
-  1. *Frequency Domain Analysis (FFT / Autocorrelation)*: Converts transaction histories into discrete time signals. Discrete Fourier Transforms isolate periodic frequencies (weekly $\approx 7\text{d}$, bi-weekly $\approx 14\text{d}$, monthly $\approx 30.4\text{d}$, quarterly $\approx 91.25\text{d}$, annual $\approx 365\text{d}$), accommodating calendar irregularities (e.g., February 28 days vs August 31 days).
-  2. *Density-Based Clustering (DBSCAN / HDBSCAN)*: Maps transactions to a 2D feature space $(\Delta \text{Days}, \Delta \text{Amount})$. Unlike K-Means, DBSCAN does not assume the number of clusters a priori and natively isolates sporadic, one-off purchases as noise (label `-1`).
-* **Comparison with FinSight v3**:
-  FinSight v3 relies on static cadence buckets:
-  - Monthly: 28–31 days
-  - Quarterly: 85–95 days
-  - Annual: 350–380 days
-  *Limitation*: FinSight completely fails on weekly transactions (e.g., newspapers, milk, micro-subscriptions), bi-weekly subscriptions, or recurring payments that skip an irregular interval (e.g., bi-monthly utility bills).
+## Product expansion research
 
-### Dimension 2: Merchant Descriptor Normalization & Entity Resolution
-* **Industry Approaches**:
-  Bank statement descriptors are notoriously obfuscated (e.g., `POS 491024 *AMZN RET* MUMBAI IN`, `AMAZON PAY INDIA`, `AMZN MKTP US*1920`).
-  1. *Tokenization & Regex Cleaning*: Stripping gateway noise, transaction IDs, location tokens, and POS terminals.
-  2. *Probabilistic String Matching & Embeddings*: Utilizing Jaro-Winkler distance, TF-IDF n-gram cosine similarity, or transformer embeddings (e.g., FastText/MiniLM) mapped to a canonical merchant knowledge graph.
-* **Comparison with FinSight v3**:
-  FinSight relies on an exact-match dictionary lookup in `config/merchant_aliases.json` (currently containing exactly two entries for CloudNest: `"CLDNST DIGITAL": "CLOUDNEST"` and `"CLOUDNEST RENEWAL": "CLOUDNEST"`). Any unmapped descriptor variation (e.g., `NETFLIX.COM` vs `NETFLIX MUMBAI`) fails to cluster, generating false negatives.
-
-### Dimension 3: Indian Regulatory Compliance (RBI & NPCI Standards)
-* **Authoritative Directives**:
-  1. *RBI Master Directions on Recurring E-Mandates (RBI/2020-21/74 and consolidated framework RBI/2024-25/64)*:
-     - **Pre-Debit Notification**: Mandates that issuers send an SMS/email pre-debit alert to the subscriber at least **24 hours prior** to the actual debit. The notification must include an actionable link enabling the user to opt-out or cancel that specific cycle.
-     - **AFA Threshold**: Mandates Additional Factor of Authentication (AFA/OTP) for mandate registration. Subsequent recurring transactions do not require AFA up to **₹15,000 per transaction** (relaxed to ₹1,00,000 for mutual fund SIPs, insurance, and credit card dues via RBI circular RBI/2023-24/90).
-     - **Right to Revoke**: Banks and payment aggregators must provide a centralized online portal or mechanism allowing consumers to pause or withdraw recurring standing instructions at any time.
-  2. *NPCI UPI AutoPay Guidelines (Operating Circular No. 223 / 2020)*:
-     - Allows instant mandate execution up to ₹15,000 without entering a UPI PIN during scheduled cycles.
-     - Mandates real-time revocation in any certified UPI third-party app (BHIM, Google Pay, PhonePe, Paytm).
-* **FinSight Compliance Review**:
-  FinSight correctly incorporates these circulars in its static reference database (`src/cancellation_guide.py`), accurately distinguishing UPI AutoPay, Card E-Mandates, and NACH procedures. However, FinSight provides guidance only; it has no direct integration with NPCI mandate hubs or bank APIs.
-
----
-
-## 3. Algorithmic Trade-off Analysis
-
-| Architecture | Computational Overhead | Generalization Capability | Noise Resistance | Cold-Start Requirement |
-|---|---|---|---|---|
-| **FinSight Heuristic v3 (Current)** | Ultra-low ($O(N)$ string lookup + sort) | Extremely Brittle (Fixed intervals, 0 weekly support) | Low (Easily fooled by regular one-off purchases) | Minimum 3 transactions |
-| **FFT + DBSCAN Clustering (Recommended)** | Low to Moderate ($O(N \log N)$ FFT + DBSCAN) | High (Discovers arbitrary cadences, tolerant of jitter) | High (Native noise classification) | Minimum 4–5 transactions |
-| **Hybrid LLM / Semantic Embedding Pipeline** | High (Inference latency & cost) | Very High (Handles extreme descriptor permutations) | High (Context-aware entity extraction) | Effective even on 1–2 transactions |
-
----
-
-## 4. Recommendations & Unresolved Questions
-
-1. **Adopt Time-Series Autocorrelation / DBSCAN**: Migrate the core recurrence detector from hardcoded calendar intervals to density clustering on normalized $(\Delta \text{Days}, \Delta \text{Amount})$ feature vectors.
-2. **Implement Fuzzy Merchant Resolution**: Introduce RapidFuzz/Jaro-Winkler token matching prior to grouping to prevent descriptor fragment fragmentation.
-3. **Unresolved Question**: How should the system handle variable-consumption recurring payments (e.g., AWS cloud bills or electric utility payments) where cadence is strictly monthly but amount varies by over 300%? (Currently classified as non-recurring by FinSight).
-
+- **Portable reminders.** RFC 5545 provides an iCalendar representation with dates and stable event identifiers. FinSight could generate an explicit local file with selected estimated renewals. Test imports into supported clients, use generic titles by default, and show what a calendar provider could sync after import. [RFC 5545](https://datatracker.ietf.org/doc/html/rfc5545)
+- **Structured file imports.** OFX Banking 2.3 defines statement periods and an institution-assigned FITID scoped to an account and institution. This could improve overlap matching for supported exports. Preserve account boundaries, keep raw identifiers out of logs, and retain CSV occurrence matching when a trustworthy ID is unavailable. [OFX Banking 2.3, sections 3.2.3 and 3.2.7](https://financialdataexchange.org/common/Uploaded%20files/OFX%20files/OFX%20Banking%20Specification%20v2.3.pdf)
+- **AA interoperability update.** ReBIT published interoperability API 1.0.0 on October 14. Its adoption notice now lists December 1, 2026 for interoperability, ahead of the original December 31 target. This is an ecosystem timeline. An integration proposal still needs a verified FIU route, authorized credentials, and consent and retention review. [ReBIT specification](https://api.rebit.org.in/spec/iopaa) · [ReBIT notice](https://api.rebit.org.in/) · [Sahamati implementation update](https://sahamati.org.in/interoperability-on-account-aggregator/)

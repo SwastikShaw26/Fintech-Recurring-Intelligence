@@ -1,6 +1,6 @@
 """
 Payment-mechanism-aware cancellation guidance for Indian recurring transactions.
-Based on NPCI UPI AutoPay regulations (OC No. 223) and RBI e-mandate framework (RBI/2024-25/64).
+Based on NPCI UPI AutoPay regulations (OC No. 223) and RBI Digital Payments - E-mandate Framework, 2026 (RBI/DPSS/2026-27/396).
 """
 
 from typing import Dict, Any, List
@@ -19,14 +19,14 @@ GUIDANCE_BY_METHOD: Dict[str, Dict[str, Any]] = {
             "Verify you receive an SMS or notification confirming the mandate status is 'Revoked'."
         ],
         "important_notes": [
-            "Revoking an AutoPay mandate stops future automated debits immediately.",
+            "Confirm the effective status and any pending debit with the issuer or payment app.",
             "If you have an active contract with the merchant, also check your merchant account to ensure you do not incur arrears.",
             "FinSight does not directly connect to your UPI app and cannot initiate cancellations on your behalf."
         ]
     },
     "card": {
         "mechanism": "Card E-Mandate (Credit / Debit Card)",
-        "regulatory_framework": "RBI Recurring E-Mandate Framework (RBI/2024-25/64)",
+        "regulatory_framework": "RBI Digital Payments - E-mandate Framework, 2026 (RBI/DPSS/2026-27/396)",
         "summary": "Cancel recurring subscription via merchant billing or through your card issuer's e-mandate hub.",
         "steps": [
             "Merchant direct route: Log into the merchant website or app, navigate to 'Billing' or 'Subscription', and click 'Cancel Subscription'.",
@@ -35,7 +35,7 @@ GUIDANCE_BY_METHOD: Dict[str, Dict[str, Any]] = {
             "Optional safeguard: If the merchant continues unauthorized billing, set your card's online recurring transaction limit to zero or request card token deletion."
         ],
         "important_notes": [
-            "RBI requires card issuers to send a pre-debit notification at least 24 hours prior to recurring card debits.",
+            "Use the issuer withdrawal facility for the e-mandate and complete the issuer authentication step.",
             "Blocking a card token stops payment but does not unilaterally terminate contractual service agreements."
         ]
     },
@@ -51,7 +51,7 @@ GUIDANCE_BY_METHOD: Dict[str, Dict[str, Any]] = {
             "If online cancellation is unsupported by your bank, submit a physical Mandate Cancellation Request Form at your home branch."
         ],
         "important_notes": [
-            "Banks are required by RBI/NPCI to accept mandate cancellation requests up to 2 working days before the scheduled debit date.",
+            "Ask your bank about its cancellation process, effective date, and any debit already in progress.",
             "Retain your mandate stop confirmation acknowledgment number."
         ]
     },

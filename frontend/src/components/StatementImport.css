@@ -1,0 +1,23 @@
+.statement-import { padding: clamp(16px, 4vw, 32px); }
+.statement-import h2, .statement-import h3 { margin: 0 0 8px; font-family: var(--font-display); font-weight: 400; }
+.statement-import p { color: var(--muted); margin: 8px 0 14px; }
+.statement-file { display: grid; gap: 6px; margin-block: 18px; font-weight: 600; }
+.statement-file input { max-width: 100%; }
+.statement-preview { overflow: auto; max-height: 280px; margin-block: 12px; border: 1px solid var(--rule); }
+.statement-preview table { border-collapse: collapse; width: 100%; }
+.statement-preview th, .statement-preview td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); min-width: 100px; overflow-wrap: anywhere; }
+.statement-mapping { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 12px; border: 1px solid var(--rule); margin: 16px 0; }
+.statement-mapping label { display: grid; gap: 5px; min-width: 0; font-weight: 600; font-size: var(--text-sm); }
+.statement-mapping select { width: 100%; min-height: 44px; background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); padding: 6px; font: inherit; }
+.statement-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.statement-import .statement-error { color: var(--attention); }
+.review-evidence { padding: 12px 0; border-top: 1px solid var(--rule); }
+.review-evidence summary { cursor: pointer; min-height: 30px; color: var(--ink); font-weight: 650; }
+.review-evidence ul { margin: 8px 0; padding-inline-start: 1.5rem; }
+.ledger-assistant .statement-actions { list-style: none; padding: 0; }
+.ledger-assistant input { min-height: 44px; width: 100%; padding: 8px; border: 1px solid var(--rule); border-radius: 4px; background: var(--paper); color: var(--ink); font: inherit; }
+.ledger-assistant form { margin-bottom: 1rem; }
+.saved-account-overview { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--rule); }
+.saved-account-selection { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 12px; border: 1px solid var(--rule); }
+.saved-account-selection label { display: flex; align-items: center; gap: 6px; min-height: 32px; overflow-wrap: anywhere; }
+.saved-account-overview li { margin-block: 6px; overflow-wrap: anywhere; }

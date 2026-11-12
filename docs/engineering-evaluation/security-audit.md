@@ -1,98 +1,16 @@
-# Security and Privacy Audit Report
+# Defensive security audit — current hosted pilot
 
-**Agent**: Agent C — Security and Privacy Auditor  
-**Skill**: `finsight-security-audit`  
-**Date**: November 11, 2026  
-**Status**: Non-Destructively Verified  
+Reviewed 12 November 2026. The hosted pilot passes real PostgreSQL and HTTPS browser checks. Public release still depends on the operational and database boundaries below.
 
----
+| Priority | Finding and source | Release action |
+| --- | --- | --- |
+| Hosted gate | Owner predicates and AES-GCM owner/statement binding are implemented. The current workflow uses the same PostgreSQL credentials for migrations and the application, and the schema has no database row policies. See `src/hosted_storage.py`, `migrations/versions/` and `.github/workflows/verify.yml`. | Test separate migration and non-owner runtime roles, minimum grants, pooled isolation and the maintenance role. Consider row policies as defense in depth. [PostgreSQL row security](https://www.postgresql.org/docs/current/ddl-rowsecurity.html) |
+| Hosted gate | Live deletion and session revocation remove rows from the running database. Restore-time reconciliation and archive expiry remain manual operational concerns. See `src/hosted_storage.py` and the [hosted runbook](../../README.md#hosted-statement-api). | Test a restore that keeps legitimate snapshots, reconciles deletions, invalidates sessions, and respects archive and WAL expiry. |
+| Hosted gate | Hosted admission limits are per worker. The Dockerfile packages the synthetic demo. No hosted ingress configuration has been verified. See `src/hosted_api.py` and `Dockerfile`. | Add shared gateway limits for pre-auth and aggregate traffic, exercise proxy trust and TLS configuration, and verify a deployable artifact. |
+| P1 | Hosted preview uploads the full selected CSV before mapping. The UI discloses this. See `frontend/src/components/StatementImport.tsx`. | Preview locally and transfer mapped fields only. Test the exact hosted request body with synthetic identifiers in unmapped columns. |
+| P1 | Runtime validates remote PostgreSQL TLS settings. Alembic consumes its configured URL separately. See `src/hosted_api.py` and `migrations/env.py`. | Reuse or verify the migration TLS policy independently. |
+| P2 | Local SQLite is unencrypted and relies on OS permissions. The local private import checks host and origin, while the saved route also checks the peer. Google Fonts and an inline loader complicate a strict CSP. | Keep local binding, align peer checks, and verify a staged CSP and HSTS at the deployment edge. |
 
-## 1. Executive Summary
+One-hour session digests, revocation, owner isolation, snapshot encryption, quota, bounded listing, retention and staged key rotation are implemented. Removing an operator credential prevents new sessions after worker restart. Existing sessions remain valid until expiration or revocation. The fresh audit did not identify cross-owner disclosure in reviewed source or test observations.
 
-This security and privacy evaluation examined the FinSight backend API, data ingress/egress points, network configuration, and third-party dependencies. While the application currently operates in an offline demonstration mode with synthetic financial records, multiple critical security and privacy architectural weaknesses exist that would pose severe risks if exposed to live user financial data or deployed to production.
-
----
-
-## 2. Vulnerability Assessment & Evidence
-
-### Vulnerability 1: Overly Permissive Wildcard CORS Configuration (CWE-942)
-* **Severity**: **Medium** (CVSS 3.1: 6.5 / `AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N`)
-* **Location**: `src/api.py`, Lines 33–39:
-```python
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-```
-* **Impact**:
-  Allowing all origins (`"*"`) with `allow_credentials=True` allows arbitrary third-party websites visited by an authenticated user to perform cross-origin requests against FinSight endpoints, extracting private financial transactions, bank mandate histories, and subscription costs via the user's browser session.
-* **Remediation**:
-  Restrict allowed origins to trusted domains or host environment variables:
-```python
-import os
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:8000").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
-)
-```
-
-### Vulnerability 2: Missing Authentication and Authorization Controls (CWE-306)
-* **Severity**: **High** (CVSS 3.1: 7.5 / `AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N`)
-* **Location**: `src/api.py`, All Endpoints (`/api/transactions`, `/api/commitments`, `/api/summary`)
-* **Impact**:
-  Every endpoint is completely unauthenticated. In a shared or hosted environment, any unauthenticated network actor can query all financial transactions, recurring payment history, and cancellation guidance. There is no concept of multi-tenancy, user isolation, or Role-Based Access Control (RBAC).
-* **Remediation**:
-  Integrate an authentication layer (OAuth2 / JWT or session bearer tokens) binding all queries to a verified `user_id`.
-
-### Vulnerability 3: Financial Privacy Leakage & PII Protection
-* **Severity**: **Medium**
-* **Location**: `src/api.py` and CSV data structures.
-* **Impact**:
-  Transaction reference IDs (`reference_id`), bank descriptors, and payment routes are exposed verbatim across API responses without masking or anonymization. While the present repository uses synthetic identifiers (`REF-00001`), production financial statements often embed account numbers, UPI VPAs, and payee phone numbers in descriptors (e.g., `UPI/4281901234/PAYEE@OKAXIS`).
-* **Remediation**:
-  Implement a PII-scrubbing sanitization filter before storing or exposing transaction descriptors, hashing bank reference numbers, and masking account/card suffixes.
-
-### Vulnerability 4: Denial of Service Risk via Unbounded Memory Pagination (CWE-400)
-* **Severity**: **Low to Medium**
-* **Location**: `src/api.py`, Lines 386–415:
-```python
-@app.get("/api/transactions")
-def transactions_endpoint(..., limit: int = Query(default=100, ge=1, le=1000), offset: int = Query(default=0, ge=0)):
-    rows = load_transactions()
-    ...
-    return {"total": len(rows), "limit": limit, "offset": offset, "items": rows[offset:offset + limit]}
-```
-* **Impact**:
-  Because pagination occurs in Python memory *after* reloading and sorting the entire dataset from disk, an attacker issuing repeated queries with varying filters will trigger repeated disk reads and garbage collection spikes, leading to thread pool exhaustion in Uvicorn.
-
----
-
-## 3. Dependency & Supply Chain Security
-
-* **Python Dependencies**:
-  - `fastapi==0.162.0`, `uvicorn==0.54.0`, `pydantic==2.14.1`: Well-maintained, recent releases.
-  - Absence of dangerous unsafe deserializers (`pickle`, `eval`, or unsanitized yaml loaders).
-* **Node.js / npm Dependencies**:
-  - React 19, Vite 8, Lucide-React, Recharts.
-  - Zero critical CVE alerts reported during `npm run build` and `npm run lint`.
-
----
-
-## 4. Security Verification Summary
-
-| Check | Target | Status | Detail |
-|---|---|---|---|
-| **CORS Policy** | `src/api.py` | **FAIL** | Wildcard `*` origin enabled. |
-| **Authentication** | Endpoints | **FAIL** | 0 endpoints enforce authentication. |
-| **Input Validation** | API Parameters | **PASS** | Query parameters use regex patterns and length limits. |
-| **SQL Injection** | Data Tier | **PASS** | No raw SQL utilized (flat CSV files). |
-| **Path Traversal** | Static Files | **PASS** | Static assets served via FastAPI `StaticFiles` and fixed paths. |
-| **PII Protection** | Transaction Descriptors | **WARN** | No sanitization of embedded bank identifiers. |
-
+The previous minimatch and cryptography advisories were remediated. The full scans at the time of the upgrades reported zero known advisories. [Dependency upgrade evidence](../engineering/implementation-log.md)

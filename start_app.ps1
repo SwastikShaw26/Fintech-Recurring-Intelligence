@@ -1,21 +1,57 @@
-# FinSight - Fintech Recurring Intelligence Launcher
-Write-Host "===============================================================" -ForegroundColor Cyan
-Write-Host "   FinSight — Recurring Payment Intelligence Platform" -ForegroundColor Green
-Write-Host "   hackFront India 2026 — Problem T4.1 | Team CTRL+SLOTH" -ForegroundColor Yellow
-Write-Host "===============================================================" -ForegroundColor Cyan
+param(
+    [string]$Python = 'python',
+    [ValidateRange(1, 65535)][int]$Port = 8000,
+    [switch]$Smoke
+)
 
-# 1. Run Recurrence Detection v3
-Write-Host "`n[1/3] Running Recurrence Detection Engine v3..." -ForegroundColor Yellow
-python src/detect_recurring_v3.py
+$ErrorActionPreference = 'Stop'
+$runtime = New-Item -ItemType Directory -Path (Join-Path ([IO.Path]::GetTempPath()) ('finsight-demo-' + [guid]::NewGuid()))
+$previousProcessed = $env:FINSIGHT_PROCESSED_DIR
+$previousDist = $env:FINSIGHT_FRONTEND_DIST
+$previousApi = $env:VITE_API_URL
 
-# 2. Run Evaluation Benchmark
-Write-Host "`n[2/3] Running Evaluation Benchmark..." -ForegroundColor Yellow
-python src/evaluate_detector_v3.py
+function Assert-Exit([string]$Step) {
+    if ($LASTEXITCODE -ne 0) { throw "$Step failed with exit code $LASTEXITCODE." }
+}
 
-# 3. Launch FastAPI Server (Serves API and Built React Frontend)
-Write-Host "`n[3/3] Starting FinSight Full-Stack Application..." -ForegroundColor Green
-Write-Host "Application URL : http://localhost:8000" -ForegroundColor Cyan
-Write-Host "API Swagger Docs: http://localhost:8000/docs" -ForegroundColor Gray
-Write-Host "`nPress Ctrl+C to stop the server.`n" -ForegroundColor DarkGray
+Push-Location $PSScriptRoot
+try {
+    $env:FINSIGHT_PROCESSED_DIR = Join-Path $runtime.FullName 'processed'
+    $env:FINSIGHT_FRONTEND_DIST = Join-Path $runtime.FullName 'dist'
+    $env:VITE_API_URL = '/'
 
-python -m uvicorn src.api:app --host 127.0.0.1 --port 8000 --reload
+    & $Python -c 'import fastapi, uvicorn'
+    Assert-Exit 'Python dependency check (install requirements.txt first)'
+    & $Python -m src.detect_recurring_v3
+    Assert-Exit 'Detector'
+
+    Push-Location frontend
+    try {
+        if (!(Test-Path -LiteralPath 'node_modules/.bin/vite.cmd')) {
+            npm ci
+            Assert-Exit 'Frontend dependency install'
+        }
+        npm run build -- --outDir $env:FINSIGHT_FRONTEND_DIST --emptyOutDir
+        Assert-Exit 'Frontend build'
+    } finally {
+        Pop-Location
+    }
+
+    if ($Smoke) {
+        & $Python -m pytest -q -p no:cacheprovider
+        Assert-Exit 'Demo smoke tests'
+    } else {
+        Write-Host "FinSight is available at http://127.0.0.1:$Port"
+        & $Python -m uvicorn src.api:app --host 127.0.0.1 --port $Port
+        Assert-Exit 'FastAPI'
+    }
+} finally {
+    Pop-Location
+    $env:FINSIGHT_PROCESSED_DIR = $previousProcessed
+    $env:FINSIGHT_FRONTEND_DIST = $previousDist
+    $env:VITE_API_URL = $previousApi
+    $resolvedRuntime = Resolve-Path -LiteralPath $runtime.FullName -ErrorAction SilentlyContinue
+    if ($resolvedRuntime.Path -eq $runtime.FullName) {
+        Remove-Item -LiteralPath $resolvedRuntime.Path -Recurse -Force
+    }
+}

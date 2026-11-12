@@ -1,0 +1,39 @@
+.benchmark-dashboard { border: 1px solid var(--rule); border-radius: var(--radius-panel); background: var(--paper); }
+.benchmark-header { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 20px; align-items: end; padding: clamp(18px, 4vw, 42px); }
+.benchmark-header h2 { margin: 0; font: 400 clamp(2rem, 5vw, 3.5rem)/1.05 var(--font-display); letter-spacing: -.035em; }
+.benchmark-header p, .benchmark-panel > p, .benchmark-evidence-content > p { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.benchmark-header .benchmark-kicker { color: var(--evergreen); margin-bottom: 10px; font-weight: 700; }
+.benchmark-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 0; border-block: 1px solid var(--rule); background: var(--inset); gap: 1px; }
+.benchmark-kpi { min-width: 0; padding: clamp(12px, 3vw, 26px); background: var(--paper); }
+.benchmark-kpi dt { color: var(--muted); font-size: var(--text-sm); }
+.benchmark-kpi dd { margin: 5px 0 0; color: var(--evergreen); font: 400 clamp(1.7rem, 4.5vw, 3.25rem)/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.benchmark-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--rule); }
+.benchmark-panel { min-width: 0; padding: clamp(14px, 3vw, 27px); background: var(--paper); }
+.benchmark-panel h3 { margin: 0 0 5px; font: 400 1.55rem/1.1 var(--font-display); }
+.benchmark-matrix { width: 100%; border-spacing: 4px; margin: 14px 0 4px; table-layout: fixed; }
+.benchmark-matrix th, .benchmark-matrix thead td { font-size: var(--text-xs); text-align: left; color: var(--muted); overflow-wrap: anywhere; }
+.benchmark-matrix button { width: 100%; min-height: 86px; border: 1px solid var(--rule); border-radius: 4px; display: grid; align-content: space-between; gap: 8px; padding: 8px; text-align: left; background: var(--evergreen-soft); color: var(--evergreen); font: 600 var(--text-xs) var(--font-sans); cursor: pointer; }
+.benchmark-matrix button[data-error='true'] { background: var(--attention-wash); color: var(--attention); }
+.benchmark-matrix button strong { font: 400 1.9rem/1 var(--font-display); }
+.benchmark-clear { min-height: 44px; border: 0; background: transparent; color: var(--evergreen); font: 600 var(--text-xs) var(--font-sans); cursor: pointer; }
+.benchmark-clear:disabled { opacity: .55; cursor: default; }
+.benchmark-cases { display: grid; gap: 4px; margin-top: 12px; }
+.benchmark-case { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; min-height: 44px; text-align: left; background: transparent; color: var(--ink); border: 1px solid transparent; border-radius: 4px; padding: 5px 8px; font: 600 var(--text-xs) var(--font-sans); cursor: pointer; }
+.benchmark-case strong { font-family: var(--font-mono); }
+.benchmark-case-track { grid-column: 1 / -1; height: 4px; background: var(--inset); }
+.benchmark-case-fill { display: block; height: 100%; background: var(--evergreen); }
+.benchmark-case-fill[data-error='true'] { background: var(--attention); }
+.benchmark-matrix button[aria-pressed='true'], .benchmark-case[aria-pressed='true'] { border-color: var(--ink); }
+.benchmark-case:hover { background: var(--canvas); }
+.benchmark-evidence, .benchmark-method { border-top: 1px solid var(--rule); }
+.benchmark-method p + p { margin-top: 9px; }
+.benchmark-rows { margin-top: 12px; }
+.benchmark-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px; padding: 10px 8px; border-top: 1px solid var(--rule); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.benchmark-row > div { display: grid; align-content: start; gap: 2px; }
+.benchmark-row span { color: var(--muted); font-size: var(--text-xs); }
+.benchmark-row[data-error='true'] { border-inline-start: 3px solid var(--attention); }
+.benchmark-row p { margin: 2px 0 0; color: var(--muted); }
+@media (max-width: 760px) {
+  .benchmark-header, .benchmark-grid, .benchmark-row { grid-template-columns: minmax(0, 1fr); }
+  .benchmark-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

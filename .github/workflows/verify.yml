@@ -1,0 +1,139 @@
+name: FinSight verification
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hosted-storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: finsight
+          POSTGRES_PASSWORD: synthetic-test-only
+          POSTGRES_DB: finsight_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U finsight -d finsight_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      FINSIGHT_TEST_POSTGRES_URL: postgresql+psycopg://finsight:synthetic-test-only@127.0.0.1:5432/finsight_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-hosted.txt
+      - run: python -m pytest -q tests/test_hosted_storage.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build hosted frontend and install Chromium
+        env:
+          VITE_FINSIGHT_HOSTED: 'true'
+        run: |
+          npm ci --prefix frontend
+          npm run build --prefix frontend -- --outDir "$RUNNER_TEMP/hosted-dist" --emptyOutDir
+          npm install --prefix "$RUNNER_TEMP/finsight-browser" --no-save --no-audit --no-fund playwright@1.65.0
+          node "$RUNNER_TEMP/finsight-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Verify hosted browser flow with PostgreSQL
+        env:
+          FINSIGHT_DEPLOYMENT_MODE: hosted
+          FINSIGHT_HOSTED_ORIGIN: https://127.0.0.1:8028
+          CORS_ALLOWED_ORIGINS: none
+        run: |
+          export FINSIGHT_HOSTED_DATABASE_URL="$FINSIGHT_TEST_POSTGRES_URL"
+          export FINSIGHT_PROCESSED_DIR="$RUNNER_TEMP/hosted-demo"
+          export FINSIGHT_FRONTEND_DIST="$RUNNER_TEMP/hosted-dist"
+          export FINSIGHT_PLAYWRIGHT="$RUNNER_TEMP/finsight-browser/node_modules/playwright/index.mjs"
+          export FINSIGHT_TEST_ALICE_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export FINSIGHT_TEST_BOB_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export FINSIGHT_HOSTED_ENCRYPTION_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
+          export FINSIGHT_HOSTED_CREDENTIALS="$(python -c 'import hashlib, json, os, uuid; print(json.dumps({hashlib.sha256(os.environ[name].encode()).hexdigest(): str(uuid.uuid4()) for name in ("FINSIGHT_TEST_ALICE_TOKEN", "FINSIGHT_TEST_BOB_TOKEN")}))')"
+          python -m alembic upgrade head
+          python -m src.detect_recurring_v3
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=127.0.0.1' -keyout "$RUNNER_TEMP/hosted-key.pem" -out "$RUNNER_TEMP/hosted-cert.pem"
+          python -m uvicorn src.api:app --host 127.0.0.1 --port 8028 --no-access-log --no-proxy-headers --ssl-keyfile "$RUNNER_TEMP/hosted-key.pem" --ssl-certfile "$RUNNER_TEMP/hosted-cert.pem" &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..40}; do
+            if curl -kfsS "$FINSIGHT_HOSTED_ORIGIN/api/ready" >/dev/null 2>&1; then break; fi
+            sleep 0.25
+          done
+          curl -kfsS "$FINSIGHT_HOSTED_ORIGIN/api/ready"
+          node frontend/tests/hosted-statement.browser.mjs
+
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VITE_API_URL: /
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          npm ci --prefix frontend
+      - name: Generate and build synthetic demo
+        run: |
+          echo "FINSIGHT_PROCESSED_DIR=$RUNNER_TEMP/finsight-demo" >> "$GITHUB_ENV"
+          echo "FINSIGHT_FRONTEND_DIST=$RUNNER_TEMP/finsight-dist" >> "$GITHUB_ENV"
+          FINSIGHT_PROCESSED_DIR="$RUNNER_TEMP/finsight-demo" python -m src.detect_recurring_v3
+          npm run build --prefix frontend -- --outDir "$RUNNER_TEMP/finsight-dist" --emptyOutDir
+      - name: Run automated tests
+        run: |
+          python -m pytest -q
+          npm run lint --prefix frontend
+          node --localstorage-file="$RUNNER_TEMP/finsight-test-storage.json" --test frontend/tests/*.test.mjs frontend/revocation-guide.test.mjs
+      - name: Install Chromium for synthetic browser smoke
+        run: |
+          npm install --prefix "$RUNNER_TEMP/finsight-browser" --no-save --no-audit --no-fund playwright@1.65.0
+          node "$RUNNER_TEMP/finsight-browser/node_modules/playwright/cli.js" install --with-deps chromium
+      - name: Run same-origin browser smoke
+        run: |
+          export FINSIGHT_LOCAL_DB="$RUNNER_TEMP/finsight-smoke.sqlite3"
+          export FINSIGHT_PLAYWRIGHT="$RUNNER_TEMP/finsight-browser/node_modules/playwright/index.mjs"
+          python -m uvicorn src.api:app --host 127.0.0.1 --port 8000 --log-level warning &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..40}; do
+            if curl -fsS http://127.0.0.1:8000/api/health >/dev/null 2>&1; then break; fi
+            sleep 0.25
+          done
+          curl -fsS http://127.0.0.1:8000/api/health >/dev/null
+          node frontend/tests/private-statement.browser.mjs
+          node frontend/tests/calendar-export.browser.mjs
+      - name: Verify synthetic deployment image
+        run: |
+          docker build --tag finsight-demo:test .
+          docker run --detach --name finsight-image --read-only --publish 127.0.0.1:8027:8000 finsight-demo:test
+          trap 'docker logs finsight-image; docker rm -f finsight-image' EXIT
+          for attempt in {1..40}; do
+            if curl -fsS http://127.0.0.1:8027/api/ready; then break; fi
+            sleep 0.25
+          done
+          curl -fsS http://127.0.0.1:8027/api/ready
+          curl -fsS http://127.0.0.1:8027/ | grep -q '<div id="root">'
+          curl -fsS http://127.0.0.1:8027/api/summary
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8027/api/private-statement)" = 404
+          test "$(curl -sS -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8027/api/local-statement)" = 404
+          FINSIGHT_PLAYWRIGHT="$RUNNER_TEMP/finsight-browser/node_modules/playwright/index.mjs" node frontend/tests/deployment.browser.mjs

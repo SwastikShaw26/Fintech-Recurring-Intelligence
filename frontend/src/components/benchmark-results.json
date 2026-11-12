@@ -1,0 +1,542 @@
+{
+  "suite": "Synthetic challenge suite v1",
+  "detector": "FinSight V3",
+  "detector_sha256": "7c66bbdcb92991391290d478db06cfbf76aa0ef24540dafa15074133c0af2d1d",
+  "fixture_sha256": "808a9a8a804d045b628db62e033e8c24902c00f0bd3e547bbca43c706c7add1a",
+  "aliases_sha256": "3517a3c9810e40126d8b3664ef323c3fe220aece41f0af5119d91be3f5922157",
+  "merchant_keys": 10,
+  "counts": {
+    "tp": 16,
+    "fp": 4,
+    "tn": 5,
+    "fn": 7
+  },
+  "metrics": {
+    "sample_count": 32,
+    "precision": 0.8,
+    "recall": 0.6956521739130435,
+    "f1": 0.7441860465116279
+  },
+  "cases": [
+    {
+      "id": "drift",
+      "name": "Shifted billing dates",
+      "premise": "A recurring monthly service posts a few days early or late.",
+      "counts": {
+        "tp": 4,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0
+      },
+      "transactions": [
+        {
+          "id": "drift-1",
+          "date": "2025-01-08",
+          "descriptor": "BRAMBLE LETTERS",
+          "amount": 420.0,
+          "method": "card",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "irregular",
+          "confidence": 0.9,
+          "rationale": "4 transactions over 93 days; amount spread 0.0%; irregular timing"
+        },
+        {
+          "id": "drift-2",
+          "date": "2025-02-10",
+          "descriptor": "BRAMBLE LETTERS",
+          "amount": 420.0,
+          "method": "card",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "irregular",
+          "confidence": 0.9,
+          "rationale": "4 transactions over 93 days; amount spread 0.0%; irregular timing"
+        },
+        {
+          "id": "drift-3",
+          "date": "2025-03-09",
+          "descriptor": "BRAMBLE LETTERS",
+          "amount": 420.0,
+          "method": "card",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "irregular",
+          "confidence": 0.9,
+          "rationale": "4 transactions over 93 days; amount spread 0.0%; irregular timing"
+        },
+        {
+          "id": "drift-4",
+          "date": "2025-04-11",
+          "descriptor": "BRAMBLE LETTERS",
+          "amount": 420.0,
+          "method": "card",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "irregular",
+          "confidence": 0.9,
+          "rationale": "4 transactions over 93 days; amount spread 0.0%; irregular timing"
+        }
+      ]
+    },
+    {
+      "id": "irregular",
+      "name": "Irregular billing",
+      "premise": "A standing service contract renews on nonuniform dates at a stable price.",
+      "counts": {
+        "tp": 4,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0
+      },
+      "transactions": [
+        {
+          "id": "irregular-1",
+          "date": "2025-01-04",
+          "descriptor": "FERN DESK",
+          "amount": 880.0,
+          "method": "bank mandate",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "irregular",
+          "confidence": 0.9,
+          "rationale": "4 transactions over 150 days; amount spread 0.0%; irregular timing"
+        },
+        {
+          "id": "irregular-2",
+          "date": "2025-02-19",
+          "descriptor": "FERN DESK",
+          "amount": 880.0,
+          "method": "bank mandate",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "irregular",
+          "confidence": 0.9,
+          "rationale": "4 transactions over 150 days; amount spread 0.0%; irregular timing"
+        },
+        {
+          "id": "irregular-3",
+          "date": "2025-05-11",
+          "descriptor": "FERN DESK",
+          "amount": 880.0,
+          "method": "bank mandate",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "irregular",
+          "confidence": 0.9,
+          "rationale": "4 transactions over 150 days; amount spread 0.0%; irregular timing"
+        },
+        {
+          "id": "irregular-4",
+          "date": "2025-06-03",
+          "descriptor": "FERN DESK",
+          "amount": 880.0,
+          "method": "bank mandate",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "irregular",
+          "confidence": 0.9,
+          "rationale": "4 transactions over 150 days; amount spread 0.0%; irregular timing"
+        }
+      ]
+    },
+    {
+      "id": "descriptors",
+      "name": "Similar descriptors",
+      "premise": "One subscription changes its statement descriptor after two payments. An unrelated single purchase has a similar name.",
+      "counts": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 1,
+        "fn": 4
+      },
+      "transactions": [
+        {
+          "id": "descriptors-1",
+          "date": "2025-01-15",
+          "descriptor": "LUMENLOFT DIGITAL",
+          "amount": 640.0,
+          "method": "card",
+          "expected": true,
+          "predicted": false,
+          "outcome": "fn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        },
+        {
+          "id": "descriptors-2",
+          "date": "2025-02-15",
+          "descriptor": "LUMENLOFT DIGITAL",
+          "amount": 640.0,
+          "method": "card",
+          "expected": true,
+          "predicted": false,
+          "outcome": "fn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        },
+        {
+          "id": "descriptors-3",
+          "date": "2025-03-15",
+          "descriptor": "LUMENLOFT MEDIA",
+          "amount": 640.0,
+          "method": "card",
+          "expected": true,
+          "predicted": false,
+          "outcome": "fn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        },
+        {
+          "id": "descriptors-4",
+          "date": "2025-04-15",
+          "descriptor": "LUMENLOFT MEDIA",
+          "amount": 640.0,
+          "method": "card",
+          "expected": true,
+          "predicted": false,
+          "outcome": "fn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        },
+        {
+          "id": "descriptors-5",
+          "date": "2025-03-18",
+          "descriptor": "LUMENLOFT MARKET",
+          "amount": 640.0,
+          "method": "card",
+          "expected": false,
+          "predicted": false,
+          "outcome": "tn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        }
+      ]
+    },
+    {
+      "id": "upi",
+      "name": "UPI transaction noise",
+      "premise": "Manual purchases from one shop occur at uneven intervals with varied amounts and no billing agreement.",
+      "counts": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 4,
+        "fn": 0
+      },
+      "transactions": [
+        {
+          "id": "upi-1",
+          "date": "2025-01-09",
+          "descriptor": "MARIGOLD BAZAAR",
+          "amount": 75.0,
+          "method": "UPI",
+          "expected": false,
+          "predicted": false,
+          "outcome": "tn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        },
+        {
+          "id": "upi-2",
+          "date": "2025-01-22",
+          "descriptor": "MARIGOLD BAZAAR",
+          "amount": 310.0,
+          "method": "UPI",
+          "expected": false,
+          "predicted": false,
+          "outcome": "tn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        },
+        {
+          "id": "upi-3",
+          "date": "2025-02-13",
+          "descriptor": "MARIGOLD BAZAAR",
+          "amount": 125.0,
+          "method": "UPI",
+          "expected": false,
+          "predicted": false,
+          "outcome": "tn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        },
+        {
+          "id": "upi-4",
+          "date": "2025-03-06",
+          "descriptor": "MARIGOLD BAZAAR",
+          "amount": 480.0,
+          "method": "UPI",
+          "expected": false,
+          "predicted": false,
+          "outcome": "tn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        }
+      ]
+    },
+    {
+      "id": "oneoffs",
+      "name": "One-time purchase lookalikes",
+      "premise": "Separately authorized purchases happen to be monthly and share the same price and descriptor.",
+      "counts": {
+        "tp": 0,
+        "fp": 4,
+        "tn": 0,
+        "fn": 0
+      },
+      "transactions": [
+        {
+          "id": "oneoffs-1",
+          "date": "2025-01-12",
+          "descriptor": "PAPERJET SUPPLIES",
+          "amount": 350.0,
+          "method": "card",
+          "expected": false,
+          "predicted": true,
+          "outcome": "fp",
+          "cadence": "monthly",
+          "confidence": 0.94,
+          "rationale": "4 transactions; median gap 31.0 days; 100% intervals fit monthly; amount spread 0.0%"
+        },
+        {
+          "id": "oneoffs-2",
+          "date": "2025-02-12",
+          "descriptor": "PAPERJET SUPPLIES",
+          "amount": 350.0,
+          "method": "card",
+          "expected": false,
+          "predicted": true,
+          "outcome": "fp",
+          "cadence": "monthly",
+          "confidence": 0.94,
+          "rationale": "4 transactions; median gap 31.0 days; 100% intervals fit monthly; amount spread 0.0%"
+        },
+        {
+          "id": "oneoffs-3",
+          "date": "2025-03-12",
+          "descriptor": "PAPERJET SUPPLIES",
+          "amount": 350.0,
+          "method": "card",
+          "expected": false,
+          "predicted": true,
+          "outcome": "fp",
+          "cadence": "monthly",
+          "confidence": 0.94,
+          "rationale": "4 transactions; median gap 31.0 days; 100% intervals fit monthly; amount spread 0.0%"
+        },
+        {
+          "id": "oneoffs-4",
+          "date": "2025-04-12",
+          "descriptor": "PAPERJET SUPPLIES",
+          "amount": 350.0,
+          "method": "card",
+          "expected": false,
+          "predicted": true,
+          "outcome": "fp",
+          "cadence": "monthly",
+          "confidence": 0.94,
+          "rationale": "4 transactions; median gap 31.0 days; 100% intervals fit monthly; amount spread 0.0%"
+        }
+      ]
+    },
+    {
+      "id": "short",
+      "name": "Incomplete history",
+      "premise": "The customer has a subscription, but the visible statement includes only two of its charges.",
+      "counts": {
+        "tp": 0,
+        "fp": 0,
+        "tn": 0,
+        "fn": 2
+      },
+      "transactions": [
+        {
+          "id": "short-1",
+          "date": "2025-03-06",
+          "descriptor": "MOSS ARCHIVE",
+          "amount": 250.0,
+          "method": "UPI AutoPay",
+          "expected": true,
+          "predicted": false,
+          "outcome": "fn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        },
+        {
+          "id": "short-2",
+          "date": "2025-04-06",
+          "descriptor": "MOSS ARCHIVE",
+          "amount": 250.0,
+          "method": "UPI AutoPay",
+          "expected": true,
+          "predicted": false,
+          "outcome": "fn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Insufficient repeated timing evidence"
+        }
+      ]
+    },
+    {
+      "id": "variable",
+      "name": "Variable recurring amounts",
+      "premise": "A subscription bills monthly with usage-based amounts. Every listed debit belongs to the same agreement.",
+      "counts": {
+        "tp": 4,
+        "fp": 0,
+        "tn": 0,
+        "fn": 1
+      },
+      "transactions": [
+        {
+          "id": "variable-1",
+          "date": "2025-01-20",
+          "descriptor": "RIVER QUOTA",
+          "amount": 420.0,
+          "method": "card",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "monthly",
+          "confidence": 1.0,
+          "rationale": "5 transactions; median gap 30.5 days; 100% intervals fit monthly; amount spread 65.5%; amount differs from group median by 23.6%; review recommended"
+        },
+        {
+          "id": "variable-2",
+          "date": "2025-02-20",
+          "descriptor": "RIVER QUOTA",
+          "amount": 550.0,
+          "method": "card",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "monthly",
+          "confidence": 1.0,
+          "rationale": "5 transactions; median gap 30.5 days; 100% intervals fit monthly; amount spread 65.5%"
+        },
+        {
+          "id": "variable-3",
+          "date": "2025-03-20",
+          "descriptor": "RIVER QUOTA",
+          "amount": 780.0,
+          "method": "card",
+          "expected": true,
+          "predicted": false,
+          "outcome": "fn",
+          "cadence": "none",
+          "confidence": 0.0,
+          "rationale": "Isolated transaction (780.00) differs significantly from RIVER QUOTA cadence"
+        },
+        {
+          "id": "variable-4",
+          "date": "2025-04-20",
+          "descriptor": "RIVER QUOTA",
+          "amount": 510.0,
+          "method": "card",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "monthly",
+          "confidence": 1.0,
+          "rationale": "5 transactions; median gap 30.5 days; 100% intervals fit monthly; amount spread 65.5%"
+        },
+        {
+          "id": "variable-5",
+          "date": "2025-05-20",
+          "descriptor": "RIVER QUOTA",
+          "amount": 560.0,
+          "method": "card",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "monthly",
+          "confidence": 1.0,
+          "rationale": "5 transactions; median gap 30.5 days; 100% intervals fit monthly; amount spread 65.5%"
+        }
+      ]
+    },
+    {
+      "id": "control",
+      "name": "Stable monthly control",
+      "premise": "A stable subscription provides a regular-cadence control for the challenge cases.",
+      "counts": {
+        "tp": 4,
+        "fp": 0,
+        "tn": 0,
+        "fn": 0
+      },
+      "transactions": [
+        {
+          "id": "control-1",
+          "date": "2025-01-05",
+          "descriptor": "IVORY RADIO",
+          "amount": 299.0,
+          "method": "UPI AutoPay",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "monthly",
+          "confidence": 0.94,
+          "rationale": "4 transactions; median gap 31.0 days; 100% intervals fit monthly; amount spread 0.0%"
+        },
+        {
+          "id": "control-2",
+          "date": "2025-02-05",
+          "descriptor": "IVORY RADIO",
+          "amount": 299.0,
+          "method": "UPI AutoPay",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "monthly",
+          "confidence": 0.94,
+          "rationale": "4 transactions; median gap 31.0 days; 100% intervals fit monthly; amount spread 0.0%"
+        },
+        {
+          "id": "control-3",
+          "date": "2025-03-05",
+          "descriptor": "IVORY RADIO",
+          "amount": 299.0,
+          "method": "UPI AutoPay",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "monthly",
+          "confidence": 0.94,
+          "rationale": "4 transactions; median gap 31.0 days; 100% intervals fit monthly; amount spread 0.0%"
+        },
+        {
+          "id": "control-4",
+          "date": "2025-04-05",
+          "descriptor": "IVORY RADIO",
+          "amount": 299.0,
+          "method": "UPI AutoPay",
+          "expected": true,
+          "predicted": true,
+          "outcome": "tp",
+          "cadence": "monthly",
+          "confidence": 0.94,
+          "rationale": "4 transactions; median gap 31.0 days; 100% intervals fit monthly; amount spread 0.0%"
+        }
+      ]
+    }
+  ]
+}

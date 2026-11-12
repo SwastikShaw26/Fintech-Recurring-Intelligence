@@ -1,0 +1,111 @@
+{
+  "provenance": "Independently authored synthetic Indian statement scenarios. Names, dates, amounts, and labels were invented from the stated premises without reference to implementation, existing data, tests, or metrics. Merchant and commitment IDs are scoped to their case. Amounts are positive INR magnitudes. Credits retain merchant identity and carry no debit commitment label.",
+  "cases": [
+    {
+      "id": "similar-names",
+      "premise": "Iravora Learn bills monthly for a study plan and rebrands as IVRA Study. Iravora Lane is an unrelated cafe whose visits are discretionary.",
+      "rows": [
+        {"date":"2025-01-07","description":"UPI/IRAVORA LEARN/AUTOPAY","amount":449,"direction":"debit","merchant":"m01_learn","commitment":"c01_study","cadence":"monthly"},
+        {"date":"2025-01-08","description":"UPI/IRAVORA LANE/POS","amount":440,"direction":"debit","merchant":"m01_cafe","commitment":null,"cadence":null},
+        {"date":"2025-02-07","description":"UPI/IRAVORA LEARN/AUTOPAY","amount":449,"direction":"debit","merchant":"m01_learn","commitment":"c01_study","cadence":"monthly"},
+        {"date":"2025-02-09","description":"UPI/IRAVORA LANE/POS","amount":450,"direction":"debit","merchant":"m01_cafe","commitment":null,"cadence":null},
+        {"date":"2025-03-07","description":"UPI/IVRA STUDY/RENEWAL","amount":449,"direction":"debit","merchant":"m01_learn","commitment":"c01_study","cadence":"monthly"},
+        {"date":"2025-04-07","description":"UPI/IVRA STUDY/RENEWAL","amount":449,"direction":"debit","merchant":"m01_learn","commitment":"c01_study","cadence":"monthly"}
+      ]
+    },
+    {
+      "id": "short-history",
+      "premise": "The first two monthly charges of Oruvani Music appear near the statement cutoff. Two same-price purchases from Tannivik Studio are separate class bookings.",
+      "rows": [
+        {"date":"2025-07-11","description":"CARD ORUVANI MUSIC MEMBERSHIP","amount":129,"direction":"debit","merchant":"m02_music","commitment":"c02_music","cadence":"monthly"},
+        {"date":"2025-07-12","description":"UPI/TANNIVIK STUDIO","amount":550,"direction":"debit","merchant":"m02_studio","commitment":null,"cadence":null},
+        {"date":"2025-08-11","description":"CARD ORUVANI MUSIC MEMBERSHIP","amount":129,"direction":"debit","merchant":"m02_music","commitment":"c02_music","cadence":"monthly"},
+        {"date":"2025-08-12","description":"UPI/TANNIVIK STUDIO","amount":550,"direction":"debit","merchant":"m02_studio","commitment":null,"cadence":null}
+      ]
+    },
+    {
+      "id": "separate-price-tiers",
+      "premise": "Two family members keep separate monthly plans with Yelruma Cloud. Both tiers share the same descriptor and billing day.",
+      "rows": [
+        {"date":"2025-04-15","description":"CARD/YELRUMA CLOUD","amount":149,"direction":"debit","merchant":"m03_cloud","commitment":"c03_basic","cadence":"monthly"},
+        {"date":"2025-04-15","description":"CARD/YELRUMA CLOUD","amount":549,"direction":"debit","merchant":"m03_cloud","commitment":"c03_plus","cadence":"monthly"},
+        {"date":"2025-05-15","description":"CARD/YELRUMA CLOUD","amount":549,"direction":"debit","merchant":"m03_cloud","commitment":"c03_plus","cadence":"monthly"},
+        {"date":"2025-05-15","description":"CARD/YELRUMA CLOUD","amount":149,"direction":"debit","merchant":"m03_cloud","commitment":"c03_basic","cadence":"monthly"},
+        {"date":"2025-06-15","description":"CARD/YELRUMA CLOUD","amount":149,"direction":"debit","merchant":"m03_cloud","commitment":"c03_basic","cadence":"monthly"},
+        {"date":"2025-06-15","description":"CARD/YELRUMA CLOUD","amount":549,"direction":"debit","merchant":"m03_cloud","commitment":"c03_plus","cadence":"monthly"},
+        {"date":"2025-07-15","description":"CARD/YELRUMA CLOUD","amount":149,"direction":"debit","merchant":"m03_cloud","commitment":"c03_basic","cadence":"monthly"},
+        {"date":"2025-07-15","description":"CARD/YELRUMA CLOUD","amount":549,"direction":"debit","merchant":"m03_cloud","commitment":"c03_plus","cadence":"monthly"}
+      ]
+    },
+    {
+      "id": "month-end-pause",
+      "premise": "Dhoravik Press bills at month end. Weekend processing shifts some postings into the following month. The member pauses April and resumes the same plan in May.",
+      "rows": [
+        {"date":"2025-01-31","description":"CARD DHORAVIK PRESS DIGITAL","amount":219,"direction":"debit","merchant":"m04_press","commitment":"c04_digital","cadence":"monthly"},
+        {"date":"2025-02-28","description":"CARD DHORAVIK PRESS DIGITAL","amount":219,"direction":"debit","merchant":"m04_press","commitment":"c04_digital","cadence":"monthly"},
+        {"date":"2025-03-31","description":"CARD DHORAVIK PRESS DIGITAL","amount":219,"direction":"debit","merchant":"m04_press","commitment":"c04_digital","cadence":"monthly"},
+        {"date":"2025-06-02","description":"CARD DHORAVIK PRESS DIGITAL","amount":219,"direction":"debit","merchant":"m04_press","commitment":"c04_digital","cadence":"monthly"},
+        {"date":"2025-06-30","description":"CARD DHORAVIK PRESS DIGITAL","amount":219,"direction":"debit","merchant":"m04_press","commitment":"c04_digital","cadence":"monthly"},
+        {"date":"2025-07-31","description":"CARD DHORAVIK PRESS DIGITAL","amount":219,"direction":"debit","merchant":"m04_press","commitment":"c04_digital","cadence":"monthly"}
+      ]
+    },
+    {
+      "id": "refund-and-retry",
+      "premise": "Mivorli Fitness collects monthly dues. A February debit is reversed and retried successfully. Both debits are attempts against the same membership.",
+      "rows": [
+        {"date":"2025-01-03","description":"NACH MIVORLI FITNESS","amount":980,"direction":"debit","merchant":"m05_fitness","commitment":"c05_member","cadence":"monthly"},
+        {"date":"2025-02-03","description":"NACH MIVORLI FITNESS","amount":980,"direction":"debit","merchant":"m05_fitness","commitment":"c05_member","cadence":"monthly"},
+        {"date":"2025-02-04","description":"NACH REV MIVORLI FITNESS","amount":980,"direction":"credit","merchant":"m05_fitness","commitment":null,"cadence":null},
+        {"date":"2025-02-06","description":"NACH MIVORLI FITNESS RETRY","amount":980,"direction":"debit","merchant":"m05_fitness","commitment":"c05_member","cadence":"monthly"},
+        {"date":"2025-03-03","description":"NACH MIVORLI FITNESS","amount":980,"direction":"debit","merchant":"m05_fitness","commitment":"c05_member","cadence":"monthly"}
+      ]
+    },
+    {
+      "id": "regular-discretionary",
+      "premise": "A customer visits Junavri Market on payday to buy the same groceries. Ransovi Audio has a monthly plan at a similar price. Only the audio plan is a commitment.",
+      "rows": [
+        {"date":"2025-01-01","description":"UPI JUNAVRI MARKET","amount":599,"direction":"debit","merchant":"m06_market","commitment":null,"cadence":null},
+        {"date":"2025-01-02","description":"CARD RANSOVI AUDIO","amount":609,"direction":"debit","merchant":"m06_audio","commitment":"c06_audio","cadence":"monthly"},
+        {"date":"2025-02-01","description":"UPI JUNAVRI MARKET","amount":599,"direction":"debit","merchant":"m06_market","commitment":null,"cadence":null},
+        {"date":"2025-02-02","description":"CARD RANSOVI AUDIO","amount":609,"direction":"debit","merchant":"m06_audio","commitment":"c06_audio","cadence":"monthly"},
+        {"date":"2025-03-01","description":"UPI JUNAVRI MARKET","amount":599,"direction":"debit","merchant":"m06_market","commitment":null,"cadence":null},
+        {"date":"2025-03-02","description":"CARD RANSOVI AUDIO","amount":609,"direction":"debit","merchant":"m06_audio","commitment":"c06_audio","cadence":"monthly"},
+        {"date":"2025-04-01","description":"UPI JUNAVRI MARKET","amount":599,"direction":"debit","merchant":"m06_market","commitment":null,"cadence":null},
+        {"date":"2025-04-02","description":"CARD RANSOVI AUDIO","amount":609,"direction":"debit","merchant":"m06_audio","commitment":"c06_audio","cadence":"monthly"}
+      ]
+    },
+    {
+      "id": "usage-based-billing",
+      "premise": "Suvrelia Metering collects monthly under a standing postpaid utility arrangement. Meter usage and a bill adjustment change the amount. A hardware purchase from the same merchant is separate.",
+      "rows": [
+        {"date":"2025-04-19","description":"BBPS SUVRELIA METERING","amount":621.75,"direction":"debit","merchant":"m07_metering","commitment":"c07_utility","cadence":"monthly"},
+        {"date":"2025-05-19","description":"BBPS SUVRELIA METERING","amount":1564.20,"direction":"debit","merchant":"m07_metering","commitment":"c07_utility","cadence":"monthly"},
+        {"date":"2025-06-12","description":"UPI SUVRELIA METERING DEVICE","amount":1600,"direction":"debit","merchant":"m07_metering","commitment":null,"cadence":null},
+        {"date":"2025-06-19","description":"BBPS SUVRELIA METERING","amount":428.90,"direction":"debit","merchant":"m07_metering","commitment":"c07_utility","cadence":"monthly"},
+        {"date":"2025-07-19","description":"BBPS SUVRELIA METERING","amount":1096.40,"direction":"debit","merchant":"m07_metering","commitment":"c07_utility","cadence":"monthly"}
+      ]
+    },
+    {
+      "id": "slow-cadences",
+      "premise": "Veynoril Backup renews annually and increases its renewal price. Keshravi Journal bills quarterly under a separate contract.",
+      "rows": [
+        {"date":"2024-09-24","description":"CARD VEYNORIL BACKUP","amount":1190,"direction":"debit","merchant":"m08_backup","commitment":"c08_backup","cadence":"annual"},
+        {"date":"2025-01-10","description":"UPI/KESHRAVI JOURNAL","amount":299,"direction":"debit","merchant":"m08_journal","commitment":"c08_journal","cadence":"quarterly"},
+        {"date":"2025-04-10","description":"UPI/KESHRAVI JOURNAL","amount":299,"direction":"debit","merchant":"m08_journal","commitment":"c08_journal","cadence":"quarterly"},
+        {"date":"2025-07-10","description":"UPI/KESHRAVI JOURNAL","amount":299,"direction":"debit","merchant":"m08_journal","commitment":"c08_journal","cadence":"quarterly"},
+        {"date":"2025-09-24","description":"CARD VEYNORIL BACKUP","amount":1290,"direction":"debit","merchant":"m08_backup","commitment":"c08_backup","cadence":"annual"},
+        {"date":"2025-10-10","description":"UPI/KESHRAVI JOURNAL","amount":299,"direction":"debit","merchant":"m08_journal","commitment":"c08_journal","cadence":"quarterly"}
+      ]
+    },
+    {
+      "id": "threshold-billing",
+      "premise": "A Nelvashi Transit standing agreement automatically replenishes the commuter wallet at a low balance. Trips determine the posting dates, so the commitment has no fixed calendar period.",
+      "rows": [
+        {"date":"2025-07-02","description":"UPI NELVASHI TRANSIT AUTO TOPUP","amount":350,"direction":"debit","merchant":"m09_transit","commitment":"c09_wallet","cadence":"irregular"},
+        {"date":"2025-07-13","description":"UPI NELVASHI TRANSIT AUTO TOPUP","amount":350,"direction":"debit","merchant":"m09_transit","commitment":"c09_wallet","cadence":"irregular"},
+        {"date":"2025-08-14","description":"UPI NELVASHI TRANSIT AUTO TOPUP","amount":350,"direction":"debit","merchant":"m09_transit","commitment":"c09_wallet","cadence":"irregular"},
+        {"date":"2025-08-19","description":"UPI NELVASHI TRANSIT AUTO TOPUP","amount":350,"direction":"debit","merchant":"m09_transit","commitment":"c09_wallet","cadence":"irregular"}
+      ]
+    }
+  ]
+}

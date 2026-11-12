@@ -1,0 +1,21 @@
+.forecast-panel { padding: clamp(1rem, 3vw, 2rem); }
+.forecast-panel h2, .forecast-panel h3 { font-family: var(--font-display); font-weight: 400; }
+.forecast-panel p { color: var(--muted); margin: 0 0 1rem; }
+.forecast-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; }
+.forecast-summary div { padding: 12px; background: var(--inset); }
+.forecast-summary dd { margin: 4px 0 0; color: var(--evergreen); font-size: 1.2rem; font-weight: 700; }
+.forecast-calendar { list-style: none; margin: 0; padding: 0; }
+.forecast-calendar li { display: grid; grid-template-columns: minmax(75px, .6fr) minmax(0, 2fr) auto; gap: 12px; padding-block: 10px; border-bottom: 1px solid var(--rule); }
+.forecast-calendar li div { min-width: 0; }
+.forecast-calendar li span { display: block; color: var(--muted); font-size: var(--text-xs); }
+.forecast-calendar button { text-align: left; padding-inline: 0; overflow-wrap: anywhere; }
+.forecast-options { border: 1px solid var(--rule); margin: 0 0 1rem; }
+.forecast-options label { display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.forecast-options label span { flex: 1; }
+.forecast-options strong { text-align: right; }
+.cash-buffer-planner { border-top: 1px solid var(--rule); margin-top: 1.5rem; }
+.cash-buffer-inputs { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
+.cash-buffer-inputs label { display: grid; gap: .35rem; }
+.cash-buffer-inputs input { min-height: 44px; width: min(100%, 14rem); }
+.cash-buffer-days { padding: 0; list-style: none; }
+.cash-buffer-days li { display: flex; flex-wrap: wrap; gap: .5rem 1rem; padding-block: .65rem; border-bottom: 1px solid var(--rule); }

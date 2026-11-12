@@ -39,7 +39,7 @@ Contrast ratios calculated from these hex values: ink on paper 13.55:1, supporti
 ## Screen rules
 
 - Make one real figure dominant: the current estimated monthly equivalent, with its annual estimate and detected/review counts as quiet, aligned facts rather than four equal cards.
-- The fabricated month-to-month line has been removed. There is no monthly history endpoint, so the overview leads with actual detected patterns and review flags instead.
+- The overview leads with detected patterns and review flags. The subscription timeline shows observed statement events and explicitly labeled calendar projections from existing commitment data.
 - Keep the wide evidence table and narrower review list, but use rules and type hierarchy in place of nested card decoration. Let the review queue carry the one attention color.
 - Remove icon tiles where the icon repeats the adjacent label. Keep Lucide at one stroke weight for controls that need visual recognition.
 - Replace all-caps micro-labels, placeholder initials, technical empty-state instructions, and internal evaluation jargon with sentence-case product language.

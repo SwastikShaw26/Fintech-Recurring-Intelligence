@@ -1,664 +1,151 @@
-﻿# 🔍 FinSight — Fintech Recurring Intelligence
+# FinSight — Recurring Payment Intelligence
 
-> **Hackathon:** hackFront India 2026 · **Problem:** T4.1 — The Auto Debits Nobody Can Find
-> **Team:** CTRL+SLOTH · **Stage:** Working Prototype & Benchmark Verified ✅
+FinSight analyzes recurring-payment patterns in a synthetic demo or user-provided statements. It shows the evidence behind each pattern, projects future charges, and helps users track cancellation steps with their payment provider. Local analysis is the verified release path. An opt-in hosted workspace is available for pilot verification.
 
----
+## What works today
 
-## Table of Contents
+| Area | Current behavior |
+| --- | --- |
+| Overview | Estimated monthly equivalent, annual estimate, review queue, commitment preview, and subscription timeline |
+| Recurring payments | Searchable pattern ledger and detail dialog with supporting transactions, cadence, heuristic score, and provider guidance |
+| Transactions | Statement ledger with payment methods and detector review flags |
+| Revocation tracker | Browser-local progress, a reset action, and a separate **Marked as revoked (user-reported)** action. The animated FinSight emblem has a static fallback |
+| Subscription timeline | One next estimate per regular pattern, observed billing events, month navigation, and links into commitment details |
+| Evaluation & audit | Interactive confusion matrix, scenario explorer, and transaction evidence from the generated synthetic challenge artifact |
+| Forecast and review | 30-day debit calendar, annualized estimates, conditional savings, payment-change evidence, and opt-in in-app reminders |
+| Statement workspaces | Private CSV analysis, merchant review, optional named SQLite workspaces, and an authenticated hosted snapshot flow |
+| Ask FinSight | Deterministic answers from loaded forecast and review evidence |
 
-1. [Vision & Problem Statement](#1-vision--problem-statement)
-2. [Key Capabilities](#2-key-capabilities)
-3. [Architecture Overview](#3-architecture-overview)
-4. [Repository Structure](#4-repository-structure)
-5. [Module Reference (Backend)](#5-module-reference-backend)
-6. [Frontend Reference](#6-frontend-reference)
-7. [REST API Endpoints](#7-rest-api-endpoints)
-8. [Data Schemas](#8-data-schemas)
-9. [Configuration](#9-configuration)
-10. [Quick Start — One Command](#10-quick-start--one-command)
-11. [Manual Setup & Running](#11-manual-setup--running)
-12. [Running Tests](#12-running-tests)
-13. [Evaluation Methodology & Results](#13-evaluation-methodology--results)
-14. [Design Decisions & Principles](#14-design-decisions--principles)
-15. [Known Limitations](#15-known-limitations)
-16. [Team Task Reference](#16-team-task-reference)
+The detector uses normalized descriptors, a small alias map, amount-tier heuristics, and timing windows for monthly, quarterly, annual, and some irregular patterns. The app shows inferred patterns and projections. Banks and issuers remain the source for mandate status and actual charges.
 
----
+## Run locally
 
-## 1. Vision & Problem Statement
-
-Banks and UPI apps routinely show transactions with cryptic, shifting merchant descriptors like `CLDNST DIGITAL`, `STRMBEE AUTO`, or `FITTRAIL 24SEPT`. People cannot tell:
-
-- Is this a subscription I'm still paying for?
-- Is this a one-off purchase or a recurring charge?
-- Did my subscription fee quietly increase last quarter?
-- How do I actually cancel — mandate revoke, UPI AutoPay, or something else?
-
-**FinSight** addresses this by applying heuristic pattern analysis to a user's transaction history to surface recurring financial commitments with:
-
-- Plain-language merchant names resolved from cryptic descriptors
-- Cadence detection (monthly, quarterly, annual, irregular)
-- Price-change alerts with percentage deviation from historical amounts
-- Trial-to-paid detection (e.g. Rs.1 auth charge → recurring Rs.299)
-- Step-by-step cancellation guidance conforming to **Indian regulatory frameworks** (UPI NPCI, RBI card e-mandate, NACH/eNACH)
-
----
-
-## 2. Key Capabilities
-
-| Capability | Description |
-|---|---|
-| **Descriptor Resolution** | Resolves evolving merchant descriptors (e.g. `CLDNST DIGITAL` to `CLOUDNEST RENEWAL`) using the `config/merchant_aliases.json` alias map, without conflating separate price tiers |
-| **Multi-Cadence Detection** | Detects Monthly / Quarterly / Annual / Irregular recurring commitments using inter-transaction interval analysis |
-| **Outlier Filtering** | Isolates one-off and habitual non-recurring charges (e.g. `FITTRAIL` single store purchase) from recurring memberships |
-| **Price-Change Alerts** | Flags unexpected price deviations above a configurable threshold (e.g. StreamBee Rs.199 to Rs.249) with exact % change and dates |
-| **Trial-to-Paid Tracking** | Detects nominal authorization token charges (e.g. Rs.1 SafeVault trial) followed by recurring subscriptions |
-| **Cancellation Guidance** | Payment-mechanism-specific cancellation steps for UPI AutoPay, Card E-Mandate, and Bank NACH/eNACH — citing actual Indian regulatory circulars |
-| **Evaluation Benchmark** | `/api/evaluation` endpoint returns live precision / recall / F1 measured against `ground_truth_labels.csv` |
-| **Single-Port Deployment** | FastAPI serves both the REST API **and** the built React SPA from **port 8000** — no separate web server needed |
-
----
-
-## 3. Architecture Overview
-
-```
-+-------------------------------------------------------------+
-|                       Browser / Client                      |
-|         React 19 SPA (TypeScript + Vite + Recharts)         |
-+---------------------------+---------------------------------+
-                            |  HTTP  (port 8000)
-+---------------------------v---------------------------------+
-|              FastAPI Backend  (src/api.py)                  |
-|                                                             |
-|  /api/summary    /api/commitments    /api/alerts            |
-|  /api/txns       /api/evaluation     /api/cancel.*          |
-|                                                             |
-|  Data Layer  (CSV files)                                    |
-|  data/raw/synthetic_transactions.csv                        |
-|  data/raw/ground_truth_labels.csv                           |
-|  data/processed/recurring_candidates_v3.csv  <- v3 pref     |
-|  data/processed/transaction_predictions.csv                 |
-|                                                             |
-|  Detector Pipeline  (src/)                                  |
-|  detect_recurring_v3.py  -> produces candidates_v3.csv      |
-|  evaluate_detector_v3.py -> produces evaluation metrics     |
-|  cancellation_guide.py   -> generates cancellation steps    |
-+-------------------------------------------------------------+
-```
-
-**Data flow summary:**
-
-1. `detect_recurring_v3.py` reads `synthetic_transactions.csv` and writes `recurring_candidates_v3.csv` + `transaction_predictions.csv`
-2. `evaluate_detector_v3.py` compares `transaction_predictions.csv` against `ground_truth_labels.csv` and prints benchmark metrics
-3. `src/api.py` reads the CSV outputs at runtime and serves them as REST JSON responses
-4. The React SPA fetches from `http://127.0.0.1:8000/api/*` and renders the dashboard
-
----
-
-## 4. Repository Structure
-
-```
-Fintech-Recurring-Intelligence/
-|
-+-- src/                          # Python backend
-|   +-- api.py                    # FastAPI server & all REST endpoints
-|   +-- cancellation_guide.py     # Generates payment-specific cancel steps
-|   +-- detect_recurring.py       # v1 baseline detector (reference only)
-|   +-- detect_recurring_v3.py    # PRIMARY detector (use this)
-|   +-- evaluate_detector_v3.py   # PRIMARY evaluator (use this)
-|   +-- generate_dataset.py       # Synthetic data generator
-|   +-- validate_dataset.py       # Dataset integrity checker
-|   +-- inspect_errors.py         # Debug utility for prediction mismatches
-|   +-- __init__.py
-|
-+-- frontend/                     # React SPA (TypeScript + Vite)
-|   +-- src/
-|   |   +-- App.tsx               # Single-page app (all pages & components)
-|   |   +-- App.css               # Full design system (dark FinTech theme)
-|   |   +-- index.css             # Global base reset (no Tailwind import)
-|   |   +-- main.tsx              # React entry point
-|   +-- dist/                     # Built production assets (served by FastAPI)
-|   +-- package.json
-|   +-- vite.config.ts
-|
-+-- data/
-|   +-- raw/
-|   |   +-- synthetic_transactions.csv   # 56 synthetic debit transactions
-|   |   +-- ground_truth_labels.csv      # Ground truth: is_recurring per TX
-|   +-- processed/
-|       +-- recurring_candidates_v3.csv  # Detector output: recurring groups
-|       +-- transaction_predictions.csv  # Detector output: per-TX prediction
-|
-+-- config/
-|   +-- merchant_aliases.json     # Descriptor -> canonical merchant name map
-|
-+-- tests/
-|   +-- test_api.py               # Pytest test suite for all API endpoints
-|
-+-- docs/
-|   +-- team_task_tracker.md      # Team assignment tracker
-|
-+-- start_app.ps1                 # One-click PowerShell launcher
-+-- README.md                     # This file
-```
-
----
-
-## 5. Module Reference (Backend)
-
-### `src/detect_recurring_v3.py` — PRIMARY DETECTOR
-
-The core detection engine. Reads raw transactions and produces two CSV outputs.
-
-**What it does (step by step):**
-
-1. **Descriptor normalization** — Applies `config/merchant_aliases.json` to normalize cryptic bank strings to canonical merchant names (e.g. `CLDNST*` variants become `CLOUDNEST`)
-2. **Interval analysis** — Groups transactions by normalized descriptor and calculates median intervals between consecutive dates
-3. **Cadence classification** — Monthly (25–35 days), Quarterly (80–100 days), Annual (340–390 days), or Irregular
-4. **Outlier detection** — Removes transactions whose amount deviates significantly from the group's median
-5. **Single-purchase rejection** — Groups with only one non-outlier transaction after filtering are rejected as non-recurring
-6. **Confidence scoring** — Heuristic score (0–1) based on occurrence count, interval consistency, and amount stability
-7. **Price-change detection** — Flags transactions where amount deviates from the median beyond the review threshold
-
-**Outputs written to `data/processed/`:**
-
-| File | Description |
-|---|---|
-| `recurring_candidates_v3.csv` | One row per recurring merchant group |
-| `transaction_predictions.csv` | One row per transaction with `predicted_recurring`, `review_required`, `heuristic_confidence` |
-
-**Key columns in `recurring_candidates_v3.csv`:**
-
-| Column | Description |
-|---|---|
-| `candidate_id` | Unique group identifier |
-| `display_name` | Resolved canonical merchant name |
-| `cadence` | `monthly` / `quarterly` / `annual` / `irregular` |
-| `typical_amount` | Median observed charge amount (INR) |
-| `heuristic_confidence` | 0–1 confidence score |
-| `occurrence_count` | Number of valid recurring transactions |
-| `evidence` | Comma-separated transaction IDs in the group |
-| `payment_method` | Most common payment method in the group |
-| `last_seen_date` | Date of most recent occurrence |
-| `estimated_next_date` | Projected next occurrence date |
-
----
-
-### `src/api.py` — FASTAPI BACKEND
-
-FastAPI server exposing REST endpoints and serving the built React SPA.
-
-**Important:** The processed CSVs must exist before starting the API. The API reads files at request time — there is no database.
-
-**Static file serving:** If `frontend/dist/` exists, it is mounted at `/` so the full SPA is served from the same port 8000 as the API.
-
-**CORS:** Wildcard (`*`) for development. Restrict to your domain in production.
-
----
-
-### `src/cancellation_guide.py`
-
-Generates structured cancellation guidance based on the payment method detected for each commitment. Returns:
-
-| Field | Description |
-|---|---|
-| `mechanism` | UPI AutoPay, Card E-Mandate, or Bank NACH |
-| `regulatory_framework` | Applicable Indian regulatory circular |
-| `summary` | Plain-language one-paragraph summary |
-| `steps` | Ordered list of actionable cancellation steps |
-| `important_notes` | Caveats (e.g. cancelling does not guarantee a refund) |
-
-Referenced regulatory frameworks:
-- **UPI AutoPay**: NPCI Circular OC No. 223
-- **Card E-Mandate**: RBI Circular RBI/2024-25/64
-- **NACH/eNACH**: NPCI NACH mandate management
-
----
-
-### `src/evaluate_detector_v3.py` — PRIMARY EVALUATOR
-
-Compares `transaction_predictions.csv` against `ground_truth_labels.csv`. Only evaluates **debit** transactions.
-
-Metrics: Precision, Recall, F1-Score, Accuracy, TP, TN, FP, FN, and per-error breakdown.
-
-Run this before every demo to confirm the detector is still performing correctly.
-
----
-
-### `src/validate_dataset.py`
-
-Checks integrity of `synthetic_transactions.csv`:
-- Required column presence
-- No duplicate transaction IDs
-- Amount is numeric and positive
-- Date is parseable
-- Direction is `debit` or `credit`
-
-Run if you modify or regenerate the dataset.
-
----
-
-### `src/generate_dataset.py`
-
-Generates a fresh `synthetic_transactions.csv` with configurable merchant scenarios (descriptor changes, trials, price hikes, annual renewals, one-off purchases).
-
-**WARNING: Do not re-run during a demo.** The ground truth labels in `ground_truth_labels.csv` are hand-tuned to the current dataset version.
-
----
-
-### `src/inspect_errors.py`
-
-Debug utility that prints false positives and false negatives alongside their raw transaction records. Use after changing detector thresholds.
-
----
-
-## 6. Frontend Reference
-
-### Technology Stack
-
-| Technology | Version | Role |
-|---|---|---|
-| React | 19.x | UI framework |
-| TypeScript | 6.x | Type safety |
-| Vite | 8.x | Build tool & dev server |
-| Recharts | 3.x | Line chart for spend overview |
-| Lucide React | 1.x | Icon library |
-| Tailwind CSS | 4.x | Installed via `@tailwindcss/vite` — NOT used in app CSS (custom design system in App.css is used instead) |
-
-### Pages
-
-The SPA is a single `App.tsx` file. Page state is `useState('Overview')`. No routing library is needed.
-
-| Page | What it shows |
-|---|---|
-| **Overview** | 4 metric cards, illustrative spend trend chart, review queue (top 5 alerts), detected patterns preview table |
-| **Recurring Payments** | Full commitment table with search filter, confidence pills, cadence badges, clickable rows |
-| **Transactions** | Full transaction ledger with payment method, direction, review flag, and amount |
-| **Evaluation & Audit** | Live benchmark metrics from `/api/evaluation`, TP/TN/FP/FN breakdown, audit highlights |
-
-### Detail Modal
-
-Clicking any commitment row opens a modal with:
-- Merchant name, typical amount, cadence, confidence score
-- Detection evidence (supporting transaction IDs)
-- Review flag with flagged transaction count
-- Full cancellation guide (mechanism, regulatory ref, steps, important notes)
-
-### Environment
-
-`frontend/.env`:
-```
-VITE_API_URL=http://127.0.0.1:8000
-```
-Override for production deployment.
-
-### Commands
+Start from the repository root. Use a compatible Python installation and Node/npm supported by the Vite version in the frontend lockfile.
 
 ```powershell
-# Install dependencies
-cd frontend && npm install
-
-# Hot-reload dev server (port 5173)
-npm run dev
-
-# Production build -> frontend/dist/ (served by FastAPI)
-npm run build
-```
-
----
-
-## 7. REST API Endpoints
-
-Base URL: `http://127.0.0.1:8000`
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/summary` | Dashboard stats — total commitments, annual spend estimate, alert count |
-| GET | `/api/transactions` | All transactions enriched with detector predictions |
-| GET | `/api/commitments` | All detected recurring patterns with cancellation guidance |
-| GET | `/api/alerts` | Price-change and review alerts |
-| GET | `/api/evaluation` | Live benchmark metrics against ground truth |
-| GET | `/docs` | FastAPI Swagger UI — interactive API explorer |
-| GET | `/redoc` | ReDoc API documentation |
-| GET | `/` | Serves the React SPA from `frontend/dist/` |
-
-### `/api/summary` response
-
-```json
-{
-  "total_transactions": 56,
-  "total_commitments": 12,
-  "estimated_annual_cost": 42180.0,
-  "review_required_count": 4,
-  "review_required_transaction_count": 6,
-  "alert_count": 4
-}
-```
-
-### `/api/commitments` response (abbreviated)
-
-```json
-{
-  "commitments": [
-    {
-      "commitment_id": "c_abc123",
-      "display_name": "CloudNest",
-      "cadence": "monthly",
-      "typical_amount": 299.0,
-      "heuristic_confidence": 0.92,
-      "occurrence_count": 6,
-      "review_required": false,
-      "evidence": ["TXN-00001", "TXN-00004"],
-      "payment_method": "UPI AutoPay",
-      "cancellation_guidance": {
-        "mechanism": "UPI AutoPay",
-        "regulatory_framework": "NPCI Circular OC No. 223",
-        "summary": "...",
-        "steps": ["Open your UPI app (PhonePe/GPay/Paytm)", "..."],
-        "important_notes": ["..."]
-      }
-    }
-  ]
-}
-```
-
-### `/api/evaluation` response
-
-```json
-{
-  "precision": 1.0,
-  "recall": 1.0,
-  "f1_score": 1.0,
-  "accuracy": 1.0,
-  "true_positives": 45,
-  "true_negatives": 11,
-  "false_positives": 0,
-  "false_negatives": 0,
-  "evaluated_transactions": 56
-}
-```
-
----
-
-## 8. Data Schemas
-
-### `data/raw/synthetic_transactions.csv`
-
-| Column | Type | Description |
-|---|---|---|
-| `transaction_id` | string | Unique ID e.g. `TXN-00001` |
-| `date` | YYYY-MM-DD | Transaction date |
-| `description` | string | Raw bank descriptor (may be cryptic) |
-| `amount` | float | Amount in INR |
-| `direction` | string | `debit` or `credit` |
-| `payment_method` | string | `UPI AutoPay`, `Card E-Mandate`, `NACH`, etc. |
-| `reference_id` | string | Optional bank reference number |
-
-### `data/raw/ground_truth_labels.csv`
-
-| Column | Type | Description |
-|---|---|---|
-| `transaction_id` | string | Matches `synthetic_transactions.csv` |
-| `is_recurring` | True/False | Hand-labelled ground truth |
-
-### `data/processed/recurring_candidates_v3.csv`
-
-| Column | Type | Description |
-|---|---|---|
-| `candidate_id` | string | Unique group ID |
-| `display_name` | string | Resolved canonical merchant name |
-| `cadence` | string | `monthly` / `quarterly` / `annual` / `irregular` |
-| `typical_amount` | float | Median charge amount |
-| `heuristic_confidence` | float | 0–1 score |
-| `occurrence_count` | int | Number of recurring transactions |
-| `evidence` | string | Comma-separated transaction IDs |
-| `payment_method` | string | Most common payment method |
-| `last_seen_date` | date | Most recent occurrence |
-| `estimated_next_date` | date | Projected next occurrence |
-
-### `config/merchant_aliases.json`
-
-Maps descriptor variants to a canonical merchant name:
-
-```json
-{
-  "CLDNST": "CloudNest",
-  "CLOUDNEST": "CloudNest",
-  "STRMBEE": "StreamBee",
-  "SFVLT": "SafeVault"
-}
-```
-
-**To add a new merchant:** Add an entry for each bank descriptor variant. The detector uses case-insensitive prefix matching.
-
----
-
-## 9. Configuration
-
-### Backend path constants (src/api.py)
-
-```
-TRANSACTIONS_FILE  = data/raw/synthetic_transactions.csv
-LABELS_FILE        = data/raw/ground_truth_labels.csv
-CANDIDATES_V3_FILE = data/processed/recurring_candidates_v3.csv  (preferred)
-CANDIDATES_V2_FILE = data/processed/recurring_candidates.csv      (fallback)
-PREDICTIONS_FILE   = data/processed/transaction_predictions.csv
-FRONTEND_DIST      = frontend/dist
-```
-
-The API automatically falls back to v2 candidates if v3 is absent.
-
-### Frontend (frontend/.env)
-
-```
-VITE_API_URL=http://127.0.0.1:8000
-```
-
-Change to your deployed backend URL for remote hosting.
-
----
-
-## 10. Quick Start — One Command
-
-```powershell
+python -m pip install -r requirements.txt
 .\start_app.ps1
 ```
 
-This script:
-1. Activates the `.venv` Python virtual environment
-2. Runs `detect_recurring_v3.py` to regenerate detector output
-3. Runs `evaluate_detector_v3.py` to verify benchmark metrics
-4. Starts the FastAPI server on port 8000
+The launcher builds the SPA and generates synthetic detector outputs in a temporary directory, then serves both through FastAPI on [port 8000](http://127.0.0.1:8000). Run `.\start_app.ps1 -Smoke` to build the same isolated demo and run the Python API and benchmark tests. The launcher accepts `-Python` and `-Port` overrides.
 
-- **Dashboard:** http://localhost:8000
-- **API Docs:** http://localhost:8000/docs
-
----
-
-## 11. Manual Setup & Running
-
-### Prerequisites
-
-- Python 3.10+
-- Node.js 18+ and npm
-- PowerShell (Windows)
-
-### Step 1 — Python environment
+For frontend development with hot reload, run:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install fastapi uvicorn
+python -m src.detect_recurring_v3
+python -m uvicorn src.api:app --host 127.0.0.1 --port 8000
 ```
 
-If a `requirements.txt` exists: `pip install -r requirements.txt`
-
-### Step 2 — Run the detector (required before API start)
-
-```powershell
-python src/detect_recurring_v3.py
-```
-
-Writes output to `data/processed/`.
-
-### Step 3 — Verify benchmark
-
-```powershell
-python src/evaluate_detector_v3.py
-```
-
-Expected: Precision 100%, Recall 100%, F1 1.000.
-
-### Step 4 — Build the frontend (optional — dist is pre-committed)
+In a second terminal:
 
 ```powershell
 cd frontend
-npm install
-npm run build
-cd ..
+npm ci
+npm run dev -- --host 127.0.0.1
 ```
 
-### Step 5 — Start the API server
+Open [FinSight](http://127.0.0.1:5173). The frontend uses `VITE_API_URL` or defaults to `http://127.0.0.1:8000`. For single-port serving, build the frontend with `npm run build` and start or restart the API so it can serve the generated `frontend/dist`.
+
+The current working copy also contains a local Node demo adapter. After generating the detector CSVs, run `node src/server.js` **instead of** Uvicorn to use it. Both servers use port 8000. The adapter has known contract differences and is currently untracked in Git, so use FastAPI for a clean checkout.
+
+## Evaluation
 
 ```powershell
-python -m uvicorn src.api:app --host 127.0.0.1 --port 8000 --reload
+python -m src.benchmark_holdout
+python -m src.benchmark_holdout --compare-calendar
+python -m unittest discover -s tests -p test_benchmark_holdout.py
+python -m pytest -q
 ```
 
-| URL | Content |
-|---|---|
-| http://localhost:8000 | React SPA dashboard |
-| http://localhost:8000/docs | Swagger UI |
-| http://localhost:8000/api/summary | JSON API response |
+The benchmark command generates the JSON used by **Evaluation & audit**. On 32 separately authored synthetic challenge debits, V3 scored **80.0% precision, 69.6% recall, and 74.4% F1** (16 TP, 4 FP, 5 TN, 7 FN). The suite uses disjoint merchant keys but was authored with knowledge of V3. The original 56-debit fixture replay is a regression check and has no established independent split. Both evaluations are debit-level and synthetic.
 
-### Step 6 — Frontend dev server (optional, hot-reload)
+For frontend checks, run `npm run lint` and `npm run build` from `frontend`. See the [current test report](docs/engineering-evaluation/test-report.md) for observed results and environment limits.
+
+## Project documentation
+
+- [Current architecture](docs/architecture.md) and [data contract](docs/data_contract.md)
+- [Repository inventory](docs/engineering/repository-inventory.md) and [feature inventory](docs/engineering/feature-inventory.md)
+- [Audit findings](docs/engineering/audit-findings.md) and [prioritized roadmap](docs/engineering/feature-roadmap.md)
+- [Current audit and release verdict](docs/engineering-evaluation/execution-summary.md) and [product expansion proposals](docs/engineering/feature-roadmap.md#product-expansion-proposals)
+- [Revocation tracker](docs/engineering/feature-05-implementation.md) and [benchmark implementation](docs/engineering/feature-07-implementation.md)
+
+## Analyze a private statement
+
+Start the local FastAPI launcher and open **Import statement**. Choose a UTF-8 CSV with a header row, preview the rows, and map date, description, and amount. Select either one amount column with a direction or sign convention, or separate debit and credit columns. Payment method is optional. The importer accepts ISO, day-first slash dates, and month-first slash dates. Choose INR, GBP, USD, EUR, or unspecified source units. FinSight does not convert amounts.
+
+FinSight analyzes the statement in memory on this computer. Results and private checklist progress stay in the current tab. **Clear private statement** removes the imported session and restores the synthetic demo. Reloading also clears the session. This action leaves the original CSV on disk. The importer handles up to 10,000 rows and uses the loopback FastAPI server.
+
+After importing, return to **Import statement → Review merchant descriptors** to link two descriptions that you know belong to the same merchant. Linking or removing a link recalculates the analysis. The ledger preserves the original descriptions. Progress for a commitment is cleared if its supporting transactions change.
+
+When importing a second export, enable **Combine with the current statement** only if both files cover complete days for the same account and currency. FinSight matches overlapping occurrences and keeps repeated rows within each export. In **Transactions**, a labeled refund or reversal credit may show a possible match to a same-amount debit within 30 days. The ledger keeps both rows and sends ambiguous matches to review.
+
+Local analysis requires no account. The hosted workspace uses operator-provisioned credentials. Bank connectivity and cross-device revocation history remain unavailable. Accuracy on real statements requires labeled evaluation data.
+
+### Optional local SQLite storage
+
+To enable **Save locally** and **Restore saved statement**, configure a database path outside the repository before launching FastAPI:
 
 ```powershell
-cd frontend && npm run dev
+$store = Join-Path $env:LOCALAPPDATA 'FinSight'
+New-Item -ItemType Directory -Path $store -Force | Out-Null
+$env:FINSIGHT_LOCAL_DB = Join-Path $store 'statement.sqlite3'
+.\start_app.ps1
 ```
 
-Runs on http://localhost:5173.
+In **Import statement → Local saved statement**, enter a nickname to save the current analysis, or select a nickname from **List saved accounts** to restore or delete its saved copy. The app analyzes one workspace at a time. A nickname holds one analysis with its mapped fields and merchant links. To replace it with a different analysis, explicitly delete its saved copy first. Existing single-workspace databases migrate to **Default workspace**. You can also export the current analysis as JSON.
 
----
+Use **List saved accounts → Combined account overview** to compare two to eight saved statements. The overview shows transaction and inferred commitment counts and available annualized estimates. Each statement is analyzed independently. Totals are grouped by known currency and span the full histories of the selected statements.
 
-## 12. Running Tests
+The SQLite file is unencrypted and relies on local OS access controls. Use this mode only with a trusted local machine and server process. Deleting a saved copy leaves downloaded exports, original CSVs, and current tab data under your control.
+
+The private workflow was verified in Chromium on 6,567 de-identified real transactions from [MoneyData v1](https://doi.org/10.17632/dnxtg6n4rv.1). See the [release verification log](docs/engineering/implementation-log.md) for provenance and the distinction between workflow and accuracy checks.
+
+## Containerized synthetic demo
+
+With a running Docker engine:
 
 ```powershell
-python -m pytest tests -v
+docker build --tag finsight-demo .
+docker run --rm --read-only --publish 127.0.0.1:8027:8000 finsight-demo
 ```
 
-Tests in `tests/test_api.py` cover:
-- All endpoint status codes (200)
-- Required response keys present
-- Metric values in valid ranges (0–1)
-- Transaction and commitment count assertions
+Open http://127.0.0.1:8027. The image builds the frontend and generates its synthetic detector outputs before startup. It runs as a non-root user with the private import and local statement endpoints disabled. The Docker health check uses `/api/ready` to check for build artifacts. Restart the app after provisioning frontend assets because FastAPI registers its static mount at startup.
 
-Ensure `.venv` is activated and run from the project root.
+## Hosted statement API
 
----
+The opt-in hosted backend accepts operator-provisioned bearer credentials over its configured HTTPS origin. Install `requirements-hosted.txt`, set the configuration below in the process secret store, and run `python -m alembic upgrade head` before starting the FastAPI server in hosted mode.
 
-## 13. Evaluation Methodology & Results
+| Variable | Value |
+| --- | --- |
+| `FINSIGHT_DEPLOYMENT_MODE` | `hosted` |
+| `FINSIGHT_HOSTED_ORIGIN` | Exact HTTPS origin without a trailing slash |
+| `FINSIGHT_HOSTED_DATABASE_URL` | SQLAlchemy `postgresql+psycopg` URL. A remote database requires `sslmode=verify-full` and its trusted CA configuration |
+| `FINSIGHT_HOSTED_ENCRYPTION_KEY` | 32 random bytes as 64 hexadecimal characters, kept separately from the database |
+| `FINSIGHT_HOSTED_FALLBACK_KEYS` | Optional JSON array of up to three distinct 64-character hex read keys, excluding the primary key |
+| `FINSIGHT_HOSTED_CREDENTIALS` | JSON object mapping each operator sign-in credential's lowercase SHA-256 hex digest to its owner's UUID. Generate values with `secrets.token_urlsafe(32)` and deliver them privately. Remove a digest and restart all workers to prevent new sessions from that credential |
 
-### How evaluation works
+The TLS endpoint must preserve the configured host. If TLS terminates at a reverse proxy, configure Uvicorn to trust forwarded scheme headers only from that proxy's address and keep the Uvicorn listener private. Disable logging of authorization headers and financial request bodies.
 
-`evaluate_detector_v3.py` performs **transaction-level binary classification**:
+Build the frontend with `VITE_FINSIGHT_HOSTED=true` and serve the result from the same HTTPS origin. Open **Import statement → Hosted workspace**, enter the provisioned credential, then import a CSV. Selecting a file sends the full CSV to the configured host for preview. Remove columns you do not want to send before selecting the file. Use **Save hosted copy** to choose retention and confirm storage. Signing out clears the tab's credential and current analysis. Use **Refresh hosted statements** after returning to the import page to list saved copies.
 
-1. Loads `transaction_predictions.csv` — detector output
-2. Loads `ground_truth_labels.csv` — hand-labelled ground truth
-3. Joins on `transaction_id`
-4. Evaluates **debit transactions only** (credits excluded)
-5. Compares `predicted_recurring` vs `is_recurring`
-6. Computes Precision / Recall / F1 / Accuracy
+For API clients, send the operator sign-in credential as a bearer header to `POST /api/hosted-session`. It returns a separate session token and expiry. Send the session token as the bearer header on JSON POST requests to `/api/hosted-statement`. The `analyze` action accepts a `statement` in the private CSV request format. The `save` action requires a mapped statement, `save_confirmed: true`, and optionally `retention_days` from 1 to 90, with a default of 30. It returns a statement ID and expiry. Use `list` to retrieve active IDs, `load` to retrieve a mapped analysis, and `delete` to remove it. Load and delete require a `statement_id`.
 
-### Results
+Sessions expire after one hour. An owner can have up to ten active sessions. Send `DELETE /api/hosted-session` with the session bearer to revoke it across workers without restarting. Requests that already passed authentication may finish. The browser clears the private view on expiry or sign-out. Reloading clears the tab state while the server session remains until expiry. On migration from revision 0001, apply Alembic revision 0002 before routing traffic to the new build and stop old workers that still accept the operator credential on statement endpoints. Exclude the `hosted_sessions` table's rows from restorable backups or clear them in the restored database before opening traffic.
 
-| Metric | Score | Notes |
-|---|---|---|
-| Precision | **100.0%** | Zero false alarms |
-| Recall | **100.0%** | All 45 recurring transactions found |
-| F1-Score | **1.000** | Perfect harmonic mean |
-| Accuracy | **100.0%** | 56/56 debit transactions correct |
-| True Positives | 45 | Monthly, quarterly, annual, irregular |
-| True Negatives | 11 | Single purchases, refunds, habitual non-recurring |
-| False Positives | 0 | — |
-| False Negatives | 0 | — |
+Expiry removes a snapshot from list and load immediately. While hosted mode runs, each API worker deletes up to 500 expired database rows at startup and every 15 minutes. PostgreSQL workers skip rows currently locked by another transaction. Configure monitoring for `Hosted retention batch failed` and repeated `full_batch=True` messages. Database-row deletion and backup, WAL and replica retention follow separate lifecycles.
 
-### Challenging scenarios correctly handled
+Use `/api/ready` for routing decisions. In hosted mode it checks the snapshot table as well as the frontend and synthetic assets. `/api/health` remains a process liveness check.
 
-| Scenario | Example | Result |
-|---|---|---|
-| Descriptor change | `CLDNST DIGITAL` to `CLOUDNEST RENEWAL` | Grouped as same merchant |
-| Separate price tiers | CloudNest Basic vs Pro | Treated as separate groups |
-| Single purchase | FITTRAIL gym visit (one-off) | Correctly rejected |
-| Trial-to-paid | Rs.1 SafeVault auth to Rs.149/month | Rs.1 excluded; recurring detected |
-| Price increase | StreamBee Rs.199 to Rs.249 | Recurring + price alert raised |
-| Irregular cadence | Quarterly with varying intervals | Classified as irregular, still flagged |
+Each hosted owner can keep up to 50 active snapshots across credentials and API workers. Expired snapshots do not count toward the limit. A save at capacity returns HTTP 409 until a snapshot is deleted or expires. Upgrade all hosted workers together to enforce the quota consistently across writers.
 
----
+Hosted lists return up to 20 active snapshots at a time, ordered by expiry and then ID. Pass the returned `next_cursor` as `cursor` in the next list request. In the browser, **Next saved statements** advances and **Refresh hosted statements** returns to the first page. Refresh to see any new copies inserted before the current page.
 
-## 14. Design Decisions & Principles
+Each API worker admits up to eight hosted requests at once, with up to two concurrent requests and 60 requests per rolling minute per authenticated owner. HTTP 429 includes `Retry-After`. The server allows up to 15 seconds to receive an admitted body. These limits are per worker and reset on restart. Configure shared gateway limits for deployment-wide traffic and unauthenticated requests.
 
-**1. Synthetic data only**
-All data is programmatically generated. No real financial data is used. Safe to demo, share, and open-source.
+### Rotate hosted encryption keys
 
-**2. Heuristic detector, not ML**
-The detector is entirely rule-based — every prediction traces to a specific rule, no training data needed, and evaluation is deterministic.
+1. Deploy keyring-capable code to every hosted worker. Generate a new 32-byte key in your secret store. Keep the current write key as primary and add the new key as a fallback on every worker.
+2. After all workers can read both keys, switch the new key to primary and retain the old key as a fallback. Verify a snapshot saved before the switch and one saved after it. If you roll back the write key, keep keyring-capable code and both read keys.
+3. Retire the old key only after all live snapshots written under it have expired and been purged, and all still-restorable backups, WAL archives, and replicas that need it have expired or been migrated. A live snapshot can last up to 90 days after the last old-key write. Keep a record of the final write and backup expiry times without recording key material.
 
-**3. Evidence-backed outputs**
-Every commitment includes the transaction IDs used as evidence, shown in the detail modal. Avoids black-box feel.
-
-**4. Distinguish observations from inferences**
-- Observed fact: "We saw 6 transactions from this merchant at ~30-day intervals"
-- Statistical inference: "This is consistent with a monthly recurring charge"
-- Never stated: "You have an active subscription" or "Your mandate is live"
-
-**5. Regulatory specificity**
-Cancellation guidance cites actual Indian frameworks (NPCI Circular OC No. 223, RBI Circular RBI/2024-25/64) — real utility beyond detection.
-
-**6. Single-port deployment**
-FastAPI mounts the React dist at `/` — one `uvicorn` process serves everything. No nginx needed.
-
----
-
-## 15. Known Limitations
-
-| Limitation | Notes |
-|---|---|
-| CSV-based data store | Replace with SQLite or Postgres for production |
-| Detector re-run required after data changes | `start_app.ps1` handles this automatically |
-| Spend trend chart is illustrative | Derived from current estimate, not historical monthly data |
-| No authentication or multi-user support | Single-user demo prototype |
-| Large frontend bundle (600KB) | Expected: Recharts is large. Use dynamic imports in production |
-| Tailwind installed but not imported in app CSS | `App.css` is the custom design system. `index.css` does NOT import Tailwind to avoid CSS reset conflicts |
-
----
-
-## 16. Team Task Reference
-
-See [docs/team_task_tracker.md](docs/team_task_tracker.md) for current task assignments.
-
-### Module ownership
-
-| Module | File to edit | Notes |
-|---|---|---|
-| Detection logic | `src/detect_recurring_v3.py` | Interval thresholds, confidence formula, outlier rules |
-| API endpoints | `src/api.py` | Add endpoints or modify response shapes |
-| Cancellation guidance | `src/cancellation_guide.py` | Add/update steps per payment method |
-| Merchant aliases | `config/merchant_aliases.json` | Add new descriptor variants |
-| Frontend UI | `frontend/src/App.tsx` | All pages and components |
-| Frontend styles | `frontend/src/App.css` | Dark FinTech design system |
-| Tests | `tests/test_api.py` | Add endpoint assertions here |
-| Dataset | `src/generate_dataset.py` | Re-generate data (update ground truth labels too) |
-
-### To add a new merchant to the demo
-
-1. Add transactions to `data/raw/synthetic_transactions.csv`
-2. Add ground truth labels to `data/raw/ground_truth_labels.csv`
-3. Add descriptor aliases to `config/merchant_aliases.json`
-4. Run `python src/detect_recurring_v3.py`
-5. Verify with `python src/evaluate_detector_v3.py`
-
----
-
-*FinSight · Built for recurring payment transparency · hackFront India 2026*
-*All transaction data is synthetic. Not financial advice.*
+Rotation changes the key for new writes. Existing snapshots retain their original encryption. For a recovery drill, restore into an isolated database and check owner access, expiry, and deletion history before opening traffic. Restoring a backup can reintroduce a snapshot explicitly deleted after that backup. A deletion reconciliation policy and emergency re-encryption procedure remain hosted release requirements.
