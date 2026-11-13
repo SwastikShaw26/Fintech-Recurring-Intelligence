@@ -753,7 +753,7 @@ export default function App() {
                   changeStatement(next)
                 }
               }} />}
-              {statement && <MerchantReview key={statement.analysis_id} api={API} statement={statement}
+              {statement && <MerchantReview key={`merchant-${statement.analysis_id}`} api={API} statement={statement}
                 hostedToken={hostedToken}
                 onAnalyze={(next) => {
                   if (!HOSTED || hostedSession === activeHostedSession.current) updateMerchantLinks(statement, next)
@@ -770,7 +770,7 @@ export default function App() {
                 onRestore={next => {
                   if (hostedSession === activeHostedSession.current) changeStatement(next)
                 }} />
-                : <SavedStatement key={statement?.analysis_id ?? 'unsaved'} api={API} statement={statement} onRestore={changeStatement}
+                : <SavedStatement key={`saved-${statement?.analysis_id ?? 'unsaved'}`} api={API} statement={statement} onRestore={changeStatement}
                 onSaved={(analysisId, account) => setStatement(current => current?.analysis_id === analysisId
                   ? { ...current, local_account: account } : current)} />}
             </>

@@ -58,8 +58,9 @@ jobs:
           export FINSIGHT_PLAYWRIGHT="$RUNNER_TEMP/finsight-browser/node_modules/playwright/index.mjs"
           export FINSIGHT_TEST_ALICE_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
           export FINSIGHT_TEST_BOB_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export FINSIGHT_TEST_HISTORY_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
           export FINSIGHT_HOSTED_ENCRYPTION_KEY="$(python -c 'import secrets; print(secrets.token_hex(32))')"
-          export FINSIGHT_HOSTED_CREDENTIALS="$(python -c 'import hashlib, json, os, uuid; print(json.dumps({hashlib.sha256(os.environ[name].encode()).hexdigest(): str(uuid.uuid4()) for name in ("FINSIGHT_TEST_ALICE_TOKEN", "FINSIGHT_TEST_BOB_TOKEN")}))')"
+          export FINSIGHT_HOSTED_CREDENTIALS="$(python -c 'import hashlib, json, os, uuid; print(json.dumps({hashlib.sha256(os.environ[name].encode()).hexdigest(): str(uuid.uuid4()) for name in ("FINSIGHT_TEST_ALICE_TOKEN", "FINSIGHT_TEST_BOB_TOKEN", "FINSIGHT_TEST_HISTORY_TOKEN")}))')"
           python -m alembic upgrade head
           python -m src.detect_recurring_v3
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=127.0.0.1' -keyout "$RUNNER_TEMP/hosted-key.pem" -out "$RUNNER_TEMP/hosted-cert.pem"
@@ -72,6 +73,7 @@ jobs:
           done
           curl -kfsS "$FINSIGHT_HOSTED_ORIGIN/api/ready"
           node frontend/tests/hosted-statement.browser.mjs
+          node frontend/tests/hosted-account-history.browser.mjs
 
   verify:
     runs-on: ubuntu-latest

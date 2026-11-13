@@ -18,9 +18,13 @@ export function MerchantReview({ api, statement, onAnalyze, hostedToken }: {
     .map(row => [String(row.description).toUpperCase(), String(row.description)])).values()].sort()
   const links = statement.merchant_links
 
-  useEffect(() => () => pending.current?.abort(), [])
+  useEffect(() => () => {
+    pending.current?.abort()
+    pending.current = null
+  }, [])
 
   async function apply(next: [string, string][], dismissals = statement.merchant_dismissals) {
+    if (pending.current) return
     const controller = new AbortController()
     pending.current = controller
     setBusy(true)
@@ -39,7 +43,10 @@ export function MerchantReview({ api, statement, onAnalyze, hostedToken }: {
     } catch (failure) {
       if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : 'Could not review merchants.')
     } finally {
-      if (!controller.signal.aborted) setBusy(false)
+      if (pending.current === controller) {
+        pending.current = null
+        setBusy(false)
+      }
     }
   }
 

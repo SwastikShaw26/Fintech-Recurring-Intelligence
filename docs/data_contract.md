@@ -112,7 +112,7 @@ Rules:
 
 Current FastAPI endpoints:
 
-- GET /api/health
+- GET /api/health and GET /api/ready
 - GET /api/summary
 - GET /api/transactions
 - GET /api/commitments
@@ -121,7 +121,7 @@ Current FastAPI endpoints:
 - GET /api/cancellation-guide/{payment_method}
 - GET /api/evaluation (original synthetic regression)
 
-The benchmark dashboard imports the separate generated challenge JSON. The browser computes milestone projections from `last_observed_date` and regular cadence and stores checklist progress separately from API commitment status. Existing commitment IDs are backend-specific and depend on candidate numbering. The Node demo adapter has known differences in defaults and aggregation.
+The benchmark dashboard imports the separate generated challenge JSON. The browser computes milestone projections from billing anchors and observed dates and stores checklist progress separately from API commitment status. V3 commitment IDs derive from the analysis namespace, merchant key and tier where applicable. Legacy adapter fallbacks may differ. See the [API reference](handbook/06-api-and-data.md) for the current surface.
 
 ## 8. Evaluation and privacy
 
@@ -136,11 +136,15 @@ The benchmark dashboard imports the separate generated challenge JSON. The brows
 
 The analysis returns a summary, transactions, commitments, alerts, an analysis ID, and merchant links. The ID scopes private reanalysis and is not a server session or credential. The API retains no private dataset. Clearing the tab session discards its data and review state while leaving the original CSV on disk.
 
-For overlapping exports in the same private tab, the analysis request can carry `overlap_csv` with the current mapped records in date, description, amount, direction, payment-method order. Set `overlap_confirmed` only for complete-day exports from the same account and currency. The response includes `duplicate_rows`. The merge uses exact multiset matching and keeps debit and credit directions separate.
+The UI previews CSV in the browser and submits mapped fields. For overlapping exports in the same private tab, the analysis request can carry `overlap_csv` with current mapped records in date, description, amount, direction, payment-method order. Set `overlap_confirmed` only for complete-day exports from the same account and currency. Use `overlap_preview` to inspect exact matches and possible conflicts. Apply the reviewed merge with the selected `overlap_excluded` IDs. The merge uses exact multiset matching and preserves debit and credit directions.
 
 ### Optional SQLite persistence
 
-`POST /api/local-statement` accepts `action` values `save`, `load`, and `delete` through same-origin loopback FastAPI only. Enable it by configuring an absolute `FINSIGHT_LOCAL_DB` path outside the repository. Save requires a mapped private statement payload in `statement`. The backend stores the normalized mapped records and merchant links. Load reruns analysis with the saved analysis ID. Deletion removes the saved workspace and leaves the in-memory tab and source file under the user's control.
+`POST /api/local-statement` accepts `save`, `load`, `delete`, `list`, and `overview` through same-origin loopback FastAPI. Enable it with an absolute `FINSIGHT_LOCAL_DB` path outside the repository. Each named workspace holds mapped records and merchant review decisions. Load reruns analysis with the saved analysis ID. Deletion leaves the in-memory tab and original file intact.
+
+### Hosted persistence
+
+The hosted API exchanges an operator credential for a short-lived session with `POST /api/hosted-session`. Use that session for `POST /api/hosted-statement` actions. Snapshot history supports encrypted names and declared or observed periods, versions, atomic replacement and shared-period comparison. See [API and data](handbook/06-api-and-data.md) and [Hosted operations](handbook/08-hosted-operations.md).
 
 ### Billing projections
 

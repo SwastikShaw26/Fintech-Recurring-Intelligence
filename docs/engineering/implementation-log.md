@@ -214,3 +214,13 @@ Independent review caught a stale list entry after deleting through a Unicode-eq
 - The frontend keeps the session token in memory, clears the private view at expiry or sign-out, and reports failed revocation. A stale response cannot reopen a previous signed-out workspace.
 - The new storage regression was red before implementation. Fresh local suite: `64 passed, 1 skipped, 1 warning in 2.19s`. Live PostgreSQL 18.6: `21 passed, 1 warning in 4.14s`. Lint and all 17 frontend tests passed. The final hosted build and HTTPS Chromium flow passed, including exchange, revoked-token rejection, owner switching, sign-out failure and browser expiry clearing.
 - Shared gateway limits, runtime database role isolation, backup deletion reconciliation and Docker verification remain open.
+
+## Five product expansions
+
+- Import now previews and maps CSV in the browser, sends mapped fields only, offers versioned CSV layouts, and previews overlap before applying exact matches and user decisions.
+- Hosted account history adds encrypted labels and periods, snapshot version and replacement actions, and currency-grouped comparison over the inclusive shared period. Deleting the latest version may allow its number to be reused. The snapshot IDs remain distinct.
+- Forecast includes private calendar export with generic event titles by default and a cash buffer scenario based on a balance entered for the current visit. The calendar download was tested locally. External calendar import was not part of that check.
+- Commitment details show scoped price and gap signals, user-reported revocation and subsequent linked debits, with a user-initiated JSON download.
+- Integrated build, lint, 68 local Python tests and 24 frontend tests passed. Disposable PostgreSQL 18.6 passed 23 hosted tests. Hosted HTTPS Chromium verified mapped-only uploads and the account history comparison and replacement. Mobile Chromium verified the calendar download.
+- Final local Chromium passed cash planner interaction, scoped revocation activity download, merchant review, two-stage overlap review and SQLite save/restore. Duplicate React keys in the import view caused stale controls during the initial run. The feature components now use distinct keys.
+- OFX remains a follow-up. The Import Quality Center currently supports CSV. The planner estimates selected recurring debits only. Calendar provider import and sync were outside browser verification.
