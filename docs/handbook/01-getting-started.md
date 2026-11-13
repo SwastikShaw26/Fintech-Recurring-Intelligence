@@ -32,6 +32,10 @@ Get-ChildItem README.md, start_app.ps1, requirements.txt
 
 ## 1.3 Windows first run
 
+After creating `.venv` and installing the Python requirements below, double-click `Run FinSight.cmd` in File Explorer. Keep its console open while using FinSight. The launcher installs npm dependencies on first use or when the manifests change, caches generated files in the ignored `.finsight-run/` folder, and opens the browser after readiness. An occupied default port triggers automatic selection of a free port. A second launch from the same checkout opens the already-running launcher instance.
+
+From PowerShell, use `& '.\Run FinSight.cmd' --port 8001` to request a preferred port, or add `--no-browser` to print the address without opening it. If Python reports a missing base executable, recreate the virtual environment with a working Python 3.12 interpreter before launching.
+
 Run the commands from the folder containing `start_app.ps1`.
 
 ```powershell

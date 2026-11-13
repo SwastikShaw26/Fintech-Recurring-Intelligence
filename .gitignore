@@ -37,6 +37,7 @@ Thumbs.db
 *.log
 
 # ── Build artefacts ───────────────────────────────────────────
+.finsight-run/
 build/
 *.egg-info/
 dist/

@@ -6,17 +6,16 @@ FinSight turns a bank statement into a ledger of recurring payment patterns. Exp
 
 ## Start on Windows
 
-Install Python 3.12 and Node.js 26 with npm. Open PowerShell in the repository folder, where you can see `start_app.ps1`, and run:
+**Double-click `Run FinSight.cmd`** in the repository folder. It opens FinSight in your default browser once the local server is ready. Subsequent launches reuse the frontend build and synthetic detector outputs until their inputs change. Press **Ctrl+C** in the launcher window to stop the server.
+
+For one-time setup, install Python 3.12 and Node.js 26 with npm, then run these commands from the repository root:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\start_app.ps1 -Python .\.venv\Scripts\python.exe
 ```
 
-Open [FinSight on port 8000](http://127.0.0.1:8000). Keep the terminal running. Press **Ctrl+C** there to stop the app. The launcher generates synthetic detector output, installs frontend packages when Vite is missing, builds the frontend, and serves it with FastAPI.
-
-If port 8000 is occupied, add `-Port 8001` to the launcher command and open [port 8001](http://127.0.0.1:8001). For macOS, Linux, separate frontend and backend commands, and install troubleshooting, see [Run FinSight](docs/handbook/01-getting-started.md).
+The launcher prefers port 8000 and chooses a free loopback port if necessary. It prints the address in its window. Double-clicking again opens the instance already started by this checkout's launcher. For macOS, Linux, or separate frontend and backend commands, see [Run FinSight](docs/handbook/01-getting-started.md).
 
 ## Explore the app
 
