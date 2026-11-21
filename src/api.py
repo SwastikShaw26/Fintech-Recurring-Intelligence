@@ -30,6 +30,7 @@ from src.private_statement import (
     MAX_REQUEST_BYTES, NORMALIZED_MAPPING, apply_statement_overlap, map_statement,
     parse_statement, plan_statement_overlap, reconcile_refunds,
 )
+from .graph_routes import router as graph_router
 
 ROOT = Path(__file__).resolve().parents[1]
 TRANSACTIONS_FILE = ROOT / "data" / "raw" / "synthetic_transactions.csv"
@@ -72,6 +73,7 @@ app = FastAPI(
     version="1.2.0",
     lifespan=lifespan,
 )
+app.include_router(graph_router, prefix="/api")
 
 DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:5173",
@@ -693,7 +695,45 @@ def analyze_statement(payload):
     refunds = reconcile_refunds(raw, aliases)
     for transaction in transactions:
         transaction.update(refunds.get(transaction["transaction_id"], {}))
-    commitments = build_commitments(transactions, candidates, currency)
+        commitments = build_commitments(transactions, candidates, currency)
+
+    # Neo4j graph ingestion — non-blocking, never raises
+    try:
+        from .neo4j_service import ingest_analysis, is_available
+        if is_available():
+            import threading
+            threading.Thread(
+                target=ingest_analysis,
+                args=(analysis_id, {
+                    "transactions": [
+                        {
+                            "transaction_id": tx["transaction_id"],
+                            "date": tx["date"],
+                            "description": tx["description"],
+                            "amount": tx["amount"],
+                            "direction": tx["direction"],
+                            "payment_method": tx.get("payment_method", ""),
+                        }
+                        for tx in transactions
+                        if tx.get("direction") == "debit"
+                    ],
+                    "commitments": [
+                        {
+                            "commitment_id": c["commitment_id"],
+                            "merchant_id": c.get("merchant_id"),
+                            "transaction_ids": c.get("transaction_ids", []),
+                            "cadence": c.get("cadence", "unknown"),
+                            "status": c.get("status", "candidate"),
+                            "confidence_score": c.get("confidence_score"),
+                        }
+                        for c in commitments
+                    ],
+                }),
+                daemon=True,
+            ).start()
+    except Exception:
+        pass  # never block the analysis response
+
     return {
         "transactions": transactions,
         "commitments": commitments,
@@ -715,7 +755,7 @@ async def private_statement(request: Request):
     host = request.url.hostname
     origin = request.headers.get("origin")
     same_origin = f"{request.url.scheme}://{request.url.netloc}"
-    if host not in {"localhost", "127.0.0.1", "::1"} or origin not in {same_origin, *DEFAULT_ALLOWED_ORIGINS}:
+    if host not in {"localhost", "127.0.0.1", "::1"} or (origin is not None and origin not in {same_origin, *DEFAULT_ALLOWED_ORIGINS}):
         raise HTTPException(status_code=403, detail="Private analysis is available from local FinSight only.")
     payload = await read_statement_request(request)
     try:
