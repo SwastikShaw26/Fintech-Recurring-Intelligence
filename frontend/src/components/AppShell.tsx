@@ -1,21 +1,21 @@
-import { useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import './AppShell.css'
 
-type Layout = 'Redesigned' | 'Classic'
+export type Layout = 'Redesigned' | 'Classic'
 type NavItem = { name: string; icon: LucideIcon }
 
-export function AppShell({ page, pageLabel, navItems, onNavigate, commitmentCount, privateMode, children }: {
+export function AppShell({ page, pageLabel, navItems, onNavigate, commitmentCount, privateMode, layout, onLayoutChange, children }: {
   page: string
   pageLabel: string
   navItems: NavItem[]
   onNavigate: (page: string) => void
   commitmentCount: number
   privateMode: boolean
+  layout: Layout
+  onLayoutChange: (mode: Layout) => void
   children: ReactNode
 }) {
-  const [layout, setLayout] = useState<Layout>('Redesigned')
-
   return (
     <div className={layout === 'Redesigned' ? 'app-shell redesigned-shell' : 'app-shell'}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
@@ -50,10 +50,10 @@ export function AppShell({ page, pageLabel, navItems, onNavigate, commitmentCoun
           <div className="layout-controls">
             <span className="data-source">{privateMode ? 'Private statement data' : 'Synthetic transaction data'}</span>
             <div className="layout-switch" role="group" aria-label="Workspace layout">
-              <button type="button" aria-pressed={layout === 'Redesigned'} onClick={() => setLayout('Redesigned')}>
+              <button type="button" aria-pressed={layout === 'Redesigned'} onClick={() => onLayoutChange('Redesigned')}>
                 Redesigned
               </button>
-              <button type="button" aria-pressed={layout === 'Classic'} onClick={() => setLayout('Classic')}>
+              <button type="button" aria-pressed={layout === 'Classic'} onClick={() => onLayoutChange('Classic')}>
                 Classic
               </button>
             </div>

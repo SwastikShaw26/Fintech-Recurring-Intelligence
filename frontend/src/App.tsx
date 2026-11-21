@@ -13,7 +13,10 @@ import {
   X,
 } from 'lucide-react'
 import { BenchmarkDashboard } from './components/BenchmarkDashboard'
-import { AppShell } from './components/AppShell'
+import { AppShell, type Layout } from './components/AppShell'
+import { CommitmentList, LedgerKpis, ObservedEvidence } from './components/LedgerDashboard'
+import { commitmentCards, ledgerCurrency, ledgerKpis, linkedDebits } from './components/ledgerViewModel'
+import { readDemoEvidence, readDemoWorkspace } from './services/workspaceRead'
 import { RevocationTracker } from './components/RevocationTracker'
 import { SubscriptionTimeline } from './components/SubscriptionTimeline'
 import { emptyRevocationState, getStoredRevocationState, type RevocationState } from './components/revocationStorage'
@@ -111,6 +114,8 @@ function evidenceText(alert: AnyRecord): string {
 
 export default function App() {
   const [page, setPage] = useState('Overview')
+  const [layout, setLayout] = useState<Layout>('Redesigned')
+  const redesigned = layout === 'Redesigned'
   const [demoSummary, setSummary] = useState<AnyRecord>({})
   const [demoTransactions, setTransactions] = useState<AnyRecord[]>([])
   const [demoCommitments, setCommitments] = useState<AnyRecord[]>([])
@@ -129,6 +134,7 @@ export default function App() {
   const commitments = statement?.commitments ?? demoCommitments
   const alerts = statement?.alerts ?? demoAlerts
   const [selected, setSelected] = useState<AnyRecord | null>(null)
+  const [demoEvidence, setDemoEvidence] = useState<{ commitment: AnyRecord; rows: AnyRecord[]; error: boolean } | null>(null)
   const [revocations, setRevocations] = useState<Record<string, RevocationState>>({})
   const modalRef = useRef<HTMLDivElement>(null)
   const [search, setSearch] = useState('')
@@ -184,22 +190,7 @@ export default function App() {
     }
 
     try {
-      const endpoints = [
-        `${API}/api/summary`,
-        `${API}/api/transactions`,
-        `${API}/api/commitments`,
-        `${API}/api/alerts`,
-      ]
-
-      const responses = await Promise.all(
-        endpoints.map(async (url) => {
-          const response = await fetch(url)
-          if (!response.ok) {
-            throw new Error(`${response.status}: ${url}`)
-          }
-          return response.json()
-        }),
-      )
+      const responses = await readDemoWorkspace(API)
 
       setSummary(responses[0] as AnyRecord)
       setTransactions(getArray(responses[1], 'transactions', 'items', 'data'))
@@ -355,6 +346,22 @@ export default function App() {
 
   const selectedGuidance = selected?.cancellation_guidance as CancellationGuidance | undefined
   const selectedId = String(selected?.commitment_id ?? selected?.id ?? '')
+  const loadedEvidence = selected && redesigned ? linkedDebits(selected, transactions) : []
+  const needsDemoEvidence = redesigned && !privateMode && !!selectedId
+    && Array.isArray(selected?.transaction_ids) && new Set(selected.transaction_ids).size > loadedEvidence.length
+  useEffect(() => {
+    if (!needsDemoEvidence || !selected) return
+    const controller = new AbortController()
+    void readDemoEvidence(API, selectedId, controller.signal).then(rows => {
+      if (!controller.signal.aborted) setDemoEvidence({ commitment: selected, rows, error: false })
+    }).catch(() => {
+      if (!controller.signal.aborted) setDemoEvidence({ commitment: selected, rows: [], error: true })
+    })
+    return () => controller.abort()
+  }, [needsDemoEvidence, selected, selectedId])
+  const activeEvidence = needsDemoEvidence && demoEvidence?.commitment === selected ? demoEvidence : null
+  const evidenceRows = selected && activeEvidence && !activeEvidence.error
+    ? linkedDebits(selected, [...transactions, ...activeEvidence.rows]) : loadedEvidence
   const selectedRevocation = selected ? commitmentRevocation(selected, revocations, privateMode) : null
   const followUp = selected && selectedRevocation?.reported
     ? mandateFollowUp(transactions, selected.transaction_ids, selectedRevocation.state.lastUpdatedIso) : null
@@ -363,6 +370,10 @@ export default function App() {
     selectedGuidance.mechanism, selectedGuidance.steps ?? [], selectedGuidance.important_notes ?? [],
   )
   const pageLabel = page === 'Evaluation & Audit' ? 'Evaluation & audit' : page
+  const asOf = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', dateStyle: 'short' }).format(new Date())
+  const ledgerState = { loading: !privateMode && loading, error: !privateMode && Boolean(error) }
+  const cardsFor = (rows: AnyRecord[]) => commitmentCards(rows, transactions, summary.currency, asOf, commitmentName, confidence,
+    item => commitmentRevocation(item, revocations, privateMode).reported)
 
   if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') {
     return (
@@ -378,7 +389,7 @@ export default function App() {
   return (
     <>
       <AppShell page={page} pageLabel={pageLabel} navItems={navItems} onNavigate={setPage}
-        commitmentCount={commitments.length} privateMode={privateMode}>
+        commitmentCount={commitments.length} privateMode={privateMode} layout={layout} onLayoutChange={setLayout}>
         <div className="page-content">
           <section className="welcome-row">
             <div>
@@ -457,7 +468,8 @@ export default function App() {
 
           {page === 'Overview' && (
             <>
-              <section className="summary-ledger" aria-label="Recurring payment summary">
+              {redesigned ? <LedgerKpis {...ledgerState} items={ledgerKpis(summary, commitments, transactions, alerts, asOf)} />
+              : <section className="summary-ledger" aria-label="Recurring payment summary">
                 <div className="lead-amount">
                   <span className="stat-label">Estimated monthly equivalent</span>
                   <strong>{money(monthlySpend)}</strong>
@@ -477,7 +489,7 @@ export default function App() {
                     <dd>{reviewTransactionCount}<span>{reviewCount} review items</span></dd>
                   </div>
                 </dl>
-              </section>
+              </section>}
 
               <SubscriptionTimeline
                 formatAmount={money}
@@ -505,7 +517,7 @@ export default function App() {
                       View all
                     </button>
                   </div>
-                  <CommitmentTable
+                  {redesigned ? <CommitmentList {...ledgerState} groups={cardsFor(commitments.slice(0, 5))} onSelect={setSelected} /> : <CommitmentTable
                     items={commitments.slice(0, 5)}
                     revocations={revocations}
                     privateMode={privateMode}
@@ -515,7 +527,7 @@ export default function App() {
                     amountFor={(item) => money(commitmentAmount(item))}
                     cadenceFor={commitmentCadence}
                     confidenceFor={confidence}
-                  />
+                  />}
                 </section>
 
                 <section className="panel alerts-panel">
@@ -592,7 +604,7 @@ export default function App() {
                 />
               </div>
 
-              <CommitmentTable
+              {redesigned ? <CommitmentList {...ledgerState} groups={cardsFor(filteredCommitments)} onSelect={setSelected} /> : <CommitmentTable
                 items={filteredCommitments}
                 revocations={revocations}
                 privateMode={privateMode}
@@ -602,7 +614,8 @@ export default function App() {
                 amountFor={(item) => money(commitmentAmount(item))}
                 cadenceFor={commitmentCadence}
                 confidenceFor={confidence}
-              />
+              />}
+              {redesigned && <p className="stat-note">Freelancer planning · Session only</p>}
               <BusinessExpensePlanner key={statement?.analysis_id ?? 'demo'} commitments={commitments}
                 nameFor={commitmentName} formatAmount={money} onSelect={setSelected} />
             </section>
@@ -700,7 +713,7 @@ export default function App() {
             </section>
           )}
 
-          {page === 'Evaluation & Audit' && <BenchmarkDashboard />}
+          {page === 'Evaluation & Audit' && <><p className="stat-note">Static benchmark</p><BenchmarkDashboard /></>}
           {page === 'Review' && <TransactionReview key={statement?.analysis_id ?? 'demo'}
             alerts={alerts} transactions={transactions} commitments={commitments} formatAmount={money} onSelect={setSelected} />}
           {page === 'Ask FinSight' && <LedgerAssistant key={statement?.analysis_id ?? 'demo'}
@@ -758,7 +771,7 @@ export default function App() {
       </AppShell>
 
       {selected && (
-        <div ref={modalRef} className="modal-backdrop" onMouseDown={(event) => {
+        <div ref={modalRef} className={redesigned ? 'modal-backdrop evidence-drawer' : 'modal-backdrop'} onMouseDown={(event) => {
           if (event.target === event.currentTarget) setSelected(null)
         }}>
           <section
@@ -825,6 +838,9 @@ export default function App() {
 
             {selectedId && <GraphEvidencePanel key={JSON.stringify([statement?.analysis_id, selectedId])}
               api={API} analysisId={statement?.analysis_id} commitmentId={selectedId} hosted={HOSTED} formatAmount={money} />}
+
+            {redesigned && <ObservedEvidence rows={evidenceRows} currency={ledgerCurrency(selected.currency, summary.currency)}
+              loading={needsDemoEvidence && !activeEvidence} error={activeEvidence?.error ?? false} />}
 
             {selectedGuidance?.summary && <p className="tracker-summary">{selectedGuidance.summary}</p>}
             {selectedGuide && selectedGuide.steps.length > 0 && selectedId && (

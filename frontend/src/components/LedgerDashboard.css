@@ -1,0 +1,65 @@
+.ledger-kpis { margin-bottom: var(--space-6); }
+.ledger-kpis dl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--rule);
+}
+.ledger-kpis dl > div { padding: 16px; background: var(--paper); }
+.ledger-kpis dt { color: var(--muted); font-size: var(--text-sm); }
+.ledger-kpis dd { margin: 4px 0 0; font-size: var(--text-sm); }
+.ledger-kpis strong { display: block; font-size: clamp(18px, 2vw, 25px); overflow-wrap: anywhere; }
+.ledger-kpis .ledger-kpi-detail { color: var(--quiet); font-size: var(--text-xs); }
+
+.redesign-commitments { display: grid; gap: 12px; }
+.redesign-commitments h3 { margin: 0 0 4px; color: var(--muted); font-size: var(--text-sm); }
+.redesign-commitments ul { margin: 0; padding: 0; list-style: none; }
+.redesign-commitments li + li { border-top: 1px solid var(--rule); }
+.redesign-commitments button {
+  display: grid;
+  grid-template-columns: minmax(90px, 1.3fr) minmax(100px, 1fr) auto minmax(104px, auto);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.redesign-commitments button:hover { background: var(--inset); }
+.redesign-commitments small { display: block; color: var(--muted); }
+.redesign-commitments .ledger-flag { color: var(--attention); }
+.redesign-commitments .ledger-sparkline { color: var(--evergreen); font-size: var(--text-xs); }
+.ledger-next-date { justify-self: end; text-align: right; }
+.ledger-next-date:has(time) { padding: 4px 8px; border: 1px dashed var(--inferred); border-radius: 6px; color: var(--inferred); }
+.ledger-next-date:has(time) small { color: inherit; }
+
+.modal-backdrop.evidence-drawer { place-items: stretch end; padding: 0; }
+.evidence-drawer .detail-modal {
+  width: min(100%, 620px);
+  max-height: 100dvh;
+  border-radius: 0;
+  background: #fff;
+  color: #172231;
+}
+.observed-evidence { border-left: 3px solid #00695c; padding-left: 12px; }
+.observed-evidence h3 { margin-top: 0; }
+.observed-evidence ul { margin: 0; padding: 0; list-style: none; }
+.observed-evidence li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; border-bottom: 1px solid var(--rule); }
+.observed-evidence li span { overflow-wrap: anywhere; }
+
+@media (max-width: 1180px) {
+  .redesign-commitments button { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .ledger-kpis dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 400px) {
+  .observed-evidence li { grid-template-columns: minmax(0, 1fr) auto; }
+  .observed-evidence li span { grid-column: 1 / -1; grid-row: 2; }
+}
