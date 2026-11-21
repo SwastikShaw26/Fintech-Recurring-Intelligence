@@ -31,6 +31,7 @@ import { SavedStatement } from './components/SavedStatement'
 import { HostedWorkspace } from './components/HostedWorkspace'
 import { revokeHostedSession } from './components/statementRequest'
 import { ForecastPanel } from './components/ForecastPanel'
+import { ForecastCard } from './components/ForecastCard'
 import { GraphEvidencePanel } from './components/GraphEvidencePanel'
 import { BusinessExpensePlanner } from './components/BusinessExpensePlanner'
 import { TransactionReview } from './components/TransactionReview'
@@ -392,6 +393,9 @@ export default function App() {
   const evidenceIds = new Set(evidenceRows.map(tx => tx.id))
   const evidenceAlertCount = selected ? alertModels.filter(alert => alert.commitmentId === selectedId
     || alert.transactions.some(row => evidenceIds.has(row.id))).length : 0
+  const forecastChart = redesigned && <ForecastCard key={workspaceKey} commitments={commitments}
+    transactions={transactions} currency={summary.currency} nameFor={commitmentName}
+    loading={ledgerState.loading} error={ledgerState.error ? error : null} />
 
   if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') {
     return (
@@ -515,6 +519,7 @@ export default function App() {
                 </dl>
               </section>}
 
+              {forecastChart}
               <SubscriptionTimeline
                 formatAmount={money}
                 commitments={commitments}
@@ -748,10 +753,10 @@ export default function App() {
             alerts={alerts} transactions={transactions} commitments={commitments}
             formatAmount={money} nameFor={commitmentName} onSelect={setSelected} onNavigate={setPage} />}
           {page === 'Forecast' && (
-            <ForecastPanel key={statement?.analysis_id ?? 'demo'} commitments={commitments} transactions={transactions}
+            <>{forecastChart}<ForecastPanel key={statement?.analysis_id ?? 'demo'} commitments={commitments} transactions={transactions}
               nameFor={commitmentName} formatAmount={money}
               reportedFor={(item) => commitmentRevocation(item, revocations, privateMode).reported}
-              onSelect={setSelected} />
+              onSelect={setSelected} /></>
           )}
           {page === 'Import statement' && (
             <>

@@ -78,6 +78,13 @@ try {
   await redesigned.click()
   await page.getByRole('heading', { name: '30-day debit calendar' }).waitFor()
   await page.locator('.forecast-calendar').getByRole('button', { name: 'Demo Studio' }).waitFor()
+  const chart = page.getByRole('region', { name: 'Payment history and forecast' })
+  await chart.getByLabel('Recurring payment').selectOption({ label: 'Demo Studio' })
+  const series = chart.getByRole('table')
+  assert.equal(await series.getByRole('cell', { name: 'Observed', exact: true }).count(), 3)
+  assert.ok(await series.getByRole('cell', { name: 'Inferred', exact: true }).count() >= 1)
+  assert.equal(await chart.locator('.forecast-card-inferred').first().evaluate(element =>
+    getComputedStyle(element).strokeDasharray !== 'none'), true)
 
   for (const [account, currency] of [['Demo Household', 'INR'], ['Demo Workspace', 'USD']]) {
     const saved = await page.request.post(`${origin}/api/local-statement`, {
