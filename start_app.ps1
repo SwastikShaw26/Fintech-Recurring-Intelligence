@@ -42,7 +42,7 @@ try {
         Assert-Exit 'Demo smoke tests'
     } else {
         Write-Host "FinSight is available at http://127.0.0.1:$Port"
-        & $Python -m uvicorn src.api:app --host 127.0.0.1 --port $Port
+        & $Python -m uvicorn src.sarvam_app:app --host 127.0.0.1 --port $Port
         Assert-Exit 'FastAPI'
     }
 } finally {

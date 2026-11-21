@@ -22,6 +22,8 @@ import { SavedStatement } from './components/SavedStatement'
 import { HostedWorkspace } from './components/HostedWorkspace'
 import { revokeHostedSession } from './components/statementRequest'
 import { ForecastPanel } from './components/ForecastPanel'
+import { GraphEvidencePanel } from './components/GraphEvidencePanel'
+import { BusinessExpensePlanner } from './components/BusinessExpensePlanner'
 import { TransactionReview } from './components/TransactionReview'
 import { LedgerAssistant } from './components/LedgerAssistant'
 import { mandateFollowUp } from './components/mandateFollowUp'
@@ -633,6 +635,8 @@ export default function App() {
                 cadenceFor={commitmentCadence}
                 confidenceFor={confidence}
               />
+              <BusinessExpensePlanner key={statement?.analysis_id ?? 'demo'} commitments={commitments}
+                nameFor={commitmentName} formatAmount={money} onSelect={setSelected} />
             </section>
           )}
 
@@ -850,6 +854,9 @@ export default function App() {
                 </ul>
               </div>
             )}
+
+            {selectedId && <GraphEvidencePanel key={JSON.stringify([statement?.analysis_id, selectedId])}
+              api={API} analysisId={statement?.analysis_id} commitmentId={selectedId} hosted={HOSTED} formatAmount={money} />}
 
             {selectedGuidance?.summary && <p className="tracker-summary">{selectedGuidance.summary}</p>}
             {selectedGuide && selectedGuide.steps.length > 0 && selectedId && (
