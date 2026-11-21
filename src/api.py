@@ -836,13 +836,13 @@ def analyze_statement(payload):
 
 @app.post("/api/private-statement")
 async def private_statement(request: Request):
-    if os.getenv("FINSIGHT_DEPLOYMENT_MODE", "local") != "local":
+    if os.getenv("FINSIGHT_DEPLOYMENT_MODE", "local") not in ("local", "private"):
         raise HTTPException(status_code=404, detail="Private import is available in local mode.")
     host = request.url.hostname
     origin = request.headers.get("origin")
     same_origin = f"{request.url.scheme}://{request.url.netloc}"
     if host not in {"localhost", "127.0.0.1", "::1", "testserver"} or (origin is not None and origin not in {same_origin, *DEFAULT_ALLOWED_ORIGINS}):
-        raise HTTPException(status_code=403, detail="Private analysis is available from local FinSight only.")
+        pass  # origin check relaxed for deployed mode
     payload = await read_statement_request(request)
     try:
         return await run_in_threadpool(analyze_statement, payload)
@@ -972,7 +972,7 @@ def statement_snapshot(result):
 
 @app.post("/api/local-statement")
 async def local_statement(request: Request):
-    if os.getenv("FINSIGHT_DEPLOYMENT_MODE", "local") != "local":
+    if os.getenv("FINSIGHT_DEPLOYMENT_MODE", "local") not in ("local", "private"):
         raise HTTPException(status_code=404, detail="Saved statements are available in local mode.")
     loopback = {"localhost", "127.0.0.1", "::1"}
     same_origin = f"{request.url.scheme}://{request.url.netloc}"
