@@ -16,6 +16,22 @@
 .statement-mapping select { width: 100%; min-height: 44px; background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; color: var(--ink); padding: 6px; font: inherit; }
 .statement-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .statement-import .statement-error { color: var(--attention); }
+.import-stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+.import-stages li { padding: 6px 10px; border-bottom: 2px solid var(--rule); color: var(--muted); font-size: var(--text-sm); }
+.import-stages li[aria-current='step'] { border-color: var(--evergreen); color: var(--evergreen); font-weight: 700; }
+.redesigned-shell .statement-dropzone { border-radius: 10px; background: var(--paper); }
+.import-mapping-grid { display: grid; gap: 12px; min-width: 0; }
+.import-mapping-grid > * { min-width: 0; }
+@media (min-width: 1120px) {
+  .import-mapping-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: start; }
+}
 .review-evidence { padding: 12px 0; border-top: 1px solid var(--rule); }
 .review-evidence summary { cursor: pointer; min-height: 30px; color: var(--ink); font-weight: 650; }
 .review-evidence ul { margin: 8px 0; padding-inline-start: 1.5rem; }

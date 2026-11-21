@@ -13,6 +13,15 @@ import {
   X,
 } from 'lucide-react'
 import { BenchmarkDashboard } from './components/BenchmarkDashboard'
+import { AppShell, type Layout } from './components/AppShell'
+import { CommitmentList, LedgerKpis, ObservedEvidence } from './components/LedgerDashboard'
+import { commitmentCards, ledgerCurrency, ledgerKpis, linkedDebits } from './components/ledgerViewModel'
+import { readDemoEvidence, readDemoWorkspace, workspaceRequest } from './services/workspaceRead'
+import { WorkspaceSelector } from './components/WorkspaceSelector'
+import { AlertCards } from './components/AlertCards'
+import { buildAlertCards } from './components/alertCardsModel'
+import { SarvamEvidenceContext } from './components/SarvamEvidenceContext'
+import { explainWithSarvam } from './services/sarvamClient'
 import { RevocationTracker } from './components/RevocationTracker'
 import { SubscriptionTimeline } from './components/SubscriptionTimeline'
 import { emptyRevocationState, getStoredRevocationState, type RevocationState } from './components/revocationStorage'
@@ -20,8 +29,11 @@ import { StatementImport, type StatementData } from './components/StatementImpor
 import { MerchantReview } from './components/MerchantReview'
 import { SavedStatement } from './components/SavedStatement'
 import { HostedWorkspace } from './components/HostedWorkspace'
-import { revokeHostedSession } from './components/statementRequest'
+import { requestAnalysis, revokeHostedSession } from './components/statementRequest'
 import { ForecastPanel } from './components/ForecastPanel'
+import { ForecastCard } from './components/ForecastCard'
+import { CommitmentBreakdown } from './components/CommitmentBreakdown'
+import { observedStatementWindow } from './components/forecastReliability'
 import { GraphEvidencePanel } from './components/GraphEvidencePanel'
 import { BusinessExpensePlanner } from './components/BusinessExpensePlanner'
 import { TransactionReview } from './components/TransactionReview'
@@ -110,6 +122,8 @@ function evidenceText(alert: AnyRecord): string {
 
 export default function App() {
   const [page, setPage] = useState('Overview')
+  const [layout, setLayout] = useState<Layout>('Redesigned')
+  const redesigned = layout === 'Redesigned'
   const [demoSummary, setSummary] = useState<AnyRecord>({})
   const [demoTransactions, setTransactions] = useState<AnyRecord[]>([])
   const [demoCommitments, setCommitments] = useState<AnyRecord[]>([])
@@ -128,6 +142,7 @@ export default function App() {
   const commitments = statement?.commitments ?? demoCommitments
   const alerts = statement?.alerts ?? demoAlerts
   const [selected, setSelected] = useState<AnyRecord | null>(null)
+  const [demoEvidence, setDemoEvidence] = useState<{ commitment: AnyRecord; rows: AnyRecord[]; error: boolean } | null>(null)
   const [revocations, setRevocations] = useState<Record<string, RevocationState>>({})
   const modalRef = useRef<HTMLDivElement>(null)
   const [search, setSearch] = useState('')
@@ -183,22 +198,7 @@ export default function App() {
     }
 
     try {
-      const endpoints = [
-        `${API}/api/summary`,
-        `${API}/api/transactions`,
-        `${API}/api/commitments`,
-        `${API}/api/alerts`,
-      ]
-
-      const responses = await Promise.all(
-        endpoints.map(async (url) => {
-          const response = await fetch(url)
-          if (!response.ok) {
-            throw new Error(`${response.status}: ${url}`)
-          }
-          return response.json()
-        }),
-      )
+      const responses = await readDemoWorkspace(API)
 
       setSummary(responses[0] as AnyRecord)
       setTransactions(getArray(responses[1], 'transactions', 'items', 'data'))
@@ -246,9 +246,9 @@ export default function App() {
       if (event.key !== 'Tab') return
       const focusable = Array.from(
         document.querySelectorAll<HTMLElement>(
-          '.detail-modal button:not(:disabled), .detail-modal a[href], .detail-modal input:not(:disabled), .detail-modal [tabindex]:not([tabindex="-1"])',
+          '.detail-modal button:not(:disabled), .detail-modal a[href], .detail-modal input:not(:disabled), .detail-modal select:not(:disabled), .detail-modal summary, .detail-modal [tabindex]:not([tabindex="-1"])',
         ),
-      )
+      ).filter(element => element.getClientRects().length > 0)
       if (focusable.length === 0) return
 
       const first = focusable[0]
@@ -354,6 +354,22 @@ export default function App() {
 
   const selectedGuidance = selected?.cancellation_guidance as CancellationGuidance | undefined
   const selectedId = String(selected?.commitment_id ?? selected?.id ?? '')
+  const loadedEvidence = selected && redesigned ? linkedDebits(selected, transactions) : []
+  const needsDemoEvidence = redesigned && !privateMode && !!selectedId
+    && Array.isArray(selected?.transaction_ids) && new Set(selected.transaction_ids).size > loadedEvidence.length
+  useEffect(() => {
+    if (!needsDemoEvidence || !selected) return
+    const controller = new AbortController()
+    void readDemoEvidence(API, selectedId, controller.signal).then(rows => {
+      if (!controller.signal.aborted) setDemoEvidence({ commitment: selected, rows, error: false })
+    }).catch(() => {
+      if (!controller.signal.aborted) setDemoEvidence({ commitment: selected, rows: [], error: true })
+    })
+    return () => controller.abort()
+  }, [needsDemoEvidence, selected, selectedId])
+  const activeEvidence = needsDemoEvidence && demoEvidence?.commitment === selected ? demoEvidence : null
+  const evidenceRows = selected && activeEvidence && !activeEvidence.error
+    ? linkedDebits(selected, [...transactions, ...activeEvidence.rows]) : loadedEvidence
   const selectedRevocation = selected ? commitmentRevocation(selected, revocations, privateMode) : null
   const followUp = selected && selectedRevocation?.reported
     ? mandateFollowUp(transactions, selected.transaction_ids, selectedRevocation.state.lastUpdatedIso) : null
@@ -362,6 +378,27 @@ export default function App() {
     selectedGuidance.mechanism, selectedGuidance.steps ?? [], selectedGuidance.important_notes ?? [],
   )
   const pageLabel = page === 'Evaluation & Audit' ? 'Evaluation & audit' : page
+  const asOf = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', dateStyle: 'short' }).format(new Date())
+  const ledgerState = { loading: !privateMode && loading, error: !privateMode && Boolean(error) }
+  const cardsFor = (rows: AnyRecord[]) => commitmentCards(rows, transactions, summary.currency, asOf, commitmentName, confidence,
+    item => commitmentRevocation(item, revocations, privateMode).reported)
+  const workspaceKey = JSON.stringify([privateMode ? (HOSTED ? 'hosted' : 'local') : 'demo', statement?.analysis_id ?? null])
+  const alertModels = redesigned ? buildAlertCards(alerts, transactions, commitments) : []
+  const alertProps = {
+    alerts: alertModels, workspaceKey, loading: ledgerState.loading, error: ledgerState.error ? error : undefined,
+    formatAmount: money, requestExplanation: explainWithSarvam, onRetry: () => void loadData(),
+    onSelectCommitment: (id: string) => {
+      const commitment = commitments.find(row => row.commitment_id === id)
+      if (commitment) setSelected(commitment)
+    },
+  }
+  const evidenceIds = new Set(evidenceRows.map(tx => tx.id))
+  const evidenceAlertCount = selected ? alertModels.filter(alert => alert.commitmentId === selectedId
+    || alert.transactions.some(row => evidenceIds.has(row.id))).length : 0
+  const forecastChart = redesigned && <ForecastCard key={`forecast:${workspaceKey}`} commitments={commitments}
+    transactions={transactions} currency={summary.currency} nameFor={commitmentName}
+    loading={ledgerState.loading} error={ledgerState.error ? error : null} />
+  const observedWindow = redesigned && page === 'Overview' ? observedStatementWindow(transactions, asOf) : null
 
   if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') {
     return (
@@ -375,43 +412,16 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <a className="skip-link" href="#main-content">Skip to main content</a>
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-name">FinSight</div>
-          <div className="brand-subtitle">Payment evidence</div>
-        </div>
-
-        <nav className="navigation" aria-label="Main navigation">
-          {navItems.map(({ name, icon: Icon }) => (
-            <button
-              key={name}
-              className={`nav-item ${page === name ? 'active' : ''}`}
-              onClick={() => setPage(name)}
-              aria-current={page === name ? 'page' : undefined}
-              type="button"
-            >
-              <Icon size={18} strokeWidth={1.75} />
-              <span>{name === 'Evaluation & Audit' ? 'Evaluation & audit' : name}</span>
-              {name === 'Recurring payments' && commitments.length > 0 && (
-                <span className="nav-count">{commitments.length}</span>
-              )}
-            </button>
-          ))}
-        </nav>
-
-        <p className="sidebar-note">{privateMode ? 'Private workspace' : 'Demo workspace'}<br />{privateMode ? 'Statement in this tab' : 'Synthetic transaction records'}</p>
-      </aside>
-
-      <main className="main-area" id="main-content">
-        <header className="topbar">
-          <div className="breadcrumb"><span>Workspace</span><strong>{pageLabel}</strong></div>
-
-          <span className="data-source">{privateMode ? 'Private statement data' : 'Synthetic transaction data'}</span>
-        </header>
-
+    <>
+      <AppShell page={page} pageLabel={pageLabel} navItems={navItems} onNavigate={setPage}
+        commitmentCount={commitments.length} privateMode={privateMode} layout={layout} onLayoutChange={setLayout}>
         <div className="page-content">
+          {redesigned && <WorkspaceSelector key={hostedSession}
+            mode={HOSTED ? 'hosted' : import.meta.env.VITE_FINSIGHT_DEMO === 'true' ? 'demo' : 'local'}
+            request={workspaceRequest(API, HOSTED, hostedToken)} connected={Boolean(hostedToken)}
+            statement={statement} onSwitch={data => {
+              if (!HOSTED || hostedSession === activeHostedSession.current) changeStatement(data)
+            }} onImport={() => setPage('Import statement')} />}
           <section className="welcome-row">
             <div>
               <h1>
@@ -489,7 +499,8 @@ export default function App() {
 
           {page === 'Overview' && (
             <>
-              <section className="summary-ledger" aria-label="Recurring payment summary">
+              {redesigned ? <LedgerKpis {...ledgerState} items={ledgerKpis(summary, commitments, transactions, alerts, asOf)} />
+              : <section className="summary-ledger" aria-label="Recurring payment summary">
                 <div className="lead-amount">
                   <span className="stat-label">Estimated monthly equivalent</span>
                   <strong>{money(monthlySpend)}</strong>
@@ -509,8 +520,9 @@ export default function App() {
                     <dd>{reviewTransactionCount}<span>{reviewCount} review items</span></dd>
                   </div>
                 </dl>
-              </section>
+              </section>}
 
+              {forecastChart}
               <SubscriptionTimeline
                 formatAmount={money}
                 commitments={commitments}
@@ -537,7 +549,7 @@ export default function App() {
                       View all
                     </button>
                   </div>
-                  <CommitmentTable
+                  {redesigned ? <CommitmentList {...ledgerState} groups={cardsFor(commitments.slice(0, 5))} onSelect={setSelected} /> : <CommitmentTable
                     items={commitments.slice(0, 5)}
                     revocations={revocations}
                     privateMode={privateMode}
@@ -547,10 +559,13 @@ export default function App() {
                     amountFor={(item) => money(commitmentAmount(item))}
                     cadenceFor={commitmentCadence}
                     confidenceFor={confidence}
-                  />
+                  />}
                 </section>
 
-                <section className="panel alerts-panel">
+                {redesigned ? <div>
+                  <AlertCards {...alertProps} previewLimit={3} />
+                  <button className="text-button" type="button" onClick={() => setPage('Review')}>See all review signals</button>
+                </div> : <section className="panel alerts-panel">
                   <div className="panel-heading">
                     <div>
                       <h2>Needs a closer look</h2>
@@ -594,8 +609,14 @@ export default function App() {
                   >
                     See all review signals
                   </button>
-                </section>
+                </section>}
               </section>
+              {redesigned && <CommitmentBreakdown key={`breakdown:${workspaceKey}`} commitments={commitments} currency={summary.currency}
+                nameFor={commitmentName} loading={ledgerState.loading} error={ledgerState.error ? error : null}
+                scope={{
+                  workspace: statement?.local_account ?? (privateMode ? (HOSTED ? 'Hosted analysis' : 'Imported statement') : 'Synthetic demo'),
+                  observedFrom: observedWindow?.first, observedTo: observedWindow?.last, reviewSignals: alerts.length,
+                }} />}
             </>
           )}
 
@@ -624,7 +645,7 @@ export default function App() {
                 />
               </div>
 
-              <CommitmentTable
+              {redesigned ? <CommitmentList {...ledgerState} groups={cardsFor(filteredCommitments)} onSelect={setSelected} /> : <CommitmentTable
                 items={filteredCommitments}
                 revocations={revocations}
                 privateMode={privateMode}
@@ -634,7 +655,8 @@ export default function App() {
                 amountFor={(item) => money(commitmentAmount(item))}
                 cadenceFor={commitmentCadence}
                 confidenceFor={confidence}
-              />
+              />}
+              {redesigned && <p className="stat-note">Freelancer planning · Session only</p>}
               <BusinessExpensePlanner key={statement?.analysis_id ?? 'demo'} commitments={commitments}
                 nameFor={commitmentName} formatAmount={money} onSelect={setSelected} />
             </section>
@@ -732,22 +754,24 @@ export default function App() {
             </section>
           )}
 
-          {page === 'Evaluation & Audit' && <BenchmarkDashboard />}
-          {page === 'Review' && <TransactionReview key={statement?.analysis_id ?? 'demo'}
-            alerts={alerts} transactions={transactions} commitments={commitments} formatAmount={money} onSelect={setSelected} />}
+          {page === 'Evaluation & Audit' && <><p className="stat-note">Static benchmark</p><BenchmarkDashboard /></>}
+          {page === 'Review' && (redesigned ? <AlertCards {...alertProps} />
+            : <TransactionReview key={statement?.analysis_id ?? 'demo'} alerts={alerts}
+              transactions={transactions} commitments={commitments} formatAmount={money} onSelect={setSelected} />)}
           {page === 'Ask FinSight' && <LedgerAssistant key={statement?.analysis_id ?? 'demo'}
             alerts={alerts} transactions={transactions} commitments={commitments}
             formatAmount={money} nameFor={commitmentName} onSelect={setSelected} onNavigate={setPage} />}
           {page === 'Forecast' && (
-            <ForecastPanel key={statement?.analysis_id ?? 'demo'} commitments={commitments} transactions={transactions}
+            <>{forecastChart}<ForecastPanel key={statement?.analysis_id ?? 'demo'} commitments={commitments} transactions={transactions}
               nameFor={commitmentName} formatAmount={money}
               reportedFor={(item) => commitmentRevocation(item, revocations, privateMode).reported}
-              onSelect={setSelected} />
+              onSelect={setSelected} /></>
           )}
           {page === 'Import statement' && (
             <>
               {HOSTED && hostedSignOutError && <div role="alert" className="error-banner"><p>{hostedSignOutError}</p></div>}
-              {(!HOSTED || hostedToken) && <StatementImport api={API} existing={statement} hostedToken={hostedToken} onAnalyze={(next) => {
+              {(!HOSTED || hostedToken) && <StatementImport redesigned={redesigned} existing={statement} hostedToken={hostedToken}
+                request={(payload, signal) => requestAnalysis(API, payload, signal, hostedToken)} onAnalyze={(next) => {
                 if (HOSTED && hostedSession !== activeHostedSession.current) return
                 if (statement?.analysis_id === next.analysis_id) {
                   updateMerchantLinks(statement, next)
@@ -787,10 +811,10 @@ export default function App() {
             {privateMode ? (HOSTED ? 'This analysis is open in your hosted workspace.' : 'Private results are held in this tab.') : 'Synthetic demo records.'} Detected patterns are estimates, not proof of an active payment mandate.
           </footer>
         </div>
-      </main>
+      </AppShell>
 
       {selected && (
-        <div ref={modalRef} className="modal-backdrop" onMouseDown={(event) => {
+        <div ref={modalRef} className={redesigned ? 'modal-backdrop evidence-drawer' : 'modal-backdrop'} onMouseDown={(event) => {
           if (event.target === event.currentTarget) setSelected(null)
         }}>
           <section
@@ -858,6 +882,12 @@ export default function App() {
             {selectedId && <GraphEvidencePanel key={JSON.stringify([statement?.analysis_id, selectedId])}
               api={API} analysisId={statement?.analysis_id} commitmentId={selectedId} hosted={HOSTED} formatAmount={money} />}
 
+            {redesigned && <ObservedEvidence rows={evidenceRows} currency={ledgerCurrency(selected.currency, summary.currency)}
+              loading={needsDemoEvidence && !activeEvidence} error={activeEvidence?.error ?? false} />}
+
+            {redesigned && <SarvamEvidenceContext contextKey={JSON.stringify([workspaceKey, selectedId])}
+              evidence={{ evidence_type: 'review', count: evidenceAlertCount }} requestExplanation={explainWithSarvam} />}
+
             {selectedGuidance?.summary && <p className="tracker-summary">{selectedGuidance.summary}</p>}
             {selectedGuide && selectedGuide.steps.length > 0 && selectedId && (
               <RevocationTracker
@@ -893,7 +923,7 @@ export default function App() {
           </section>
         </div>
       )}
-    </div>
+    </>
   )
 }
 

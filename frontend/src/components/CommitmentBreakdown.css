@@ -1,0 +1,29 @@
+.cost-breakdown { padding: clamp(1rem, 3vw, 2rem); }
+.cost-breakdown :is(h2, h3) { font-family: var(--font-display); font-weight: 400; }
+.cost-breakdown-group { margin-top: var(--space-6); border-top: 1px solid var(--rule); }
+.cost-summary-scope { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0; }
+.cost-summary-scope dt { color: var(--muted); font-size: var(--text-xs); }
+.cost-summary-scope dd { margin: 0; overflow-wrap: anywhere; }
+.cost-group-switch { margin-inline-end: var(--space-3); }
+.cost-donut { margin: 0; padding: var(--space-3); background: var(--inset); border-radius: var(--radius-panel); min-width: 0; }
+.cost-donut figcaption { font-weight: 700; }
+.cost-donut svg { display: block; width: min(100%, 10rem); margin: var(--space-2) auto; }
+.cost-donut circle { fill: none; stroke: var(--slice); stroke-width: 15; }
+.cost-donut-track { --slice: var(--rule); }
+.cost-donut-color-0 { --slice: var(--evergreen); }
+.cost-donut-color-1 { --slice: var(--inferred); }
+.cost-donut-color-2 { --slice: var(--attention); }
+.cost-donut-color-3 { --slice: #9a544d; }
+.cost-donut-color-4 { --slice: #76608d; }
+.cost-donut-color-5 { --slice: #687743; }
+.cost-donut table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.cost-donut caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.cost-donut :is(th, td) { padding: var(--space-1); border-bottom: 1px solid var(--rule); text-align: right; }
+.cost-donut th:first-child { text-align: left; overflow-wrap: anywhere; }
+.cost-donut-chip { display: inline-block; width: 0.7rem; height: 0.7rem; margin-inline-end: var(--space-1); background: var(--slice); border-radius: 50%; }
