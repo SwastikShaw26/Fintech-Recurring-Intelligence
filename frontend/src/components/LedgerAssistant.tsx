@@ -23,13 +23,18 @@ export function LedgerAssistant({ commitments, transactions, alerts, formatAmoun
     : null, [submitted, today, commitments, alerts])
   const evidence = useMemo<SarvamEvidence | null>(() => {
     if (answer?.kind === 'forecast') {
-      return { evidence_type: 'forecast', count: answer.entries.length, days: answer.days }
+      return { evidence_type: 'forecast', count: answer.entries.length, days: answer.days, question: submitted }
     }
     if (answer?.kind === 'review') {
-      return { evidence_type: 'review', count: answer.alerts.length }
+      return { evidence_type: 'review', count: answer.alerts.length, question: submitted }
+    }
+    if (answer?.kind === 'unsupported' && submitted) {
+      const topMerchants = commitments.slice(0, 5).map(c => nameFor(c)).filter(Boolean).join(', ')
+      const contextSummary = `User has ${commitments.length} detected recurring payment commitments (${topMerchants || 'none specified'}). There are ${alerts.length} flagged transaction alerts requiring review.`
+      return { evidence_type: 'custom', count: commitments.length, question: submitted, context_summary: contextSummary }
     }
     return null
-  }, [answer])
+  }, [answer, submitted, commitments, alerts, nameFor])
   const byTransaction = new Map(transactions.map(row => [row.transaction_id, row]))
   const byCommitment = new Map(commitments.map(row => [row.commitment_id, row]))
 
@@ -57,7 +62,9 @@ export function LedgerAssistant({ commitments, transactions, alerts, formatAmoun
       {answer && (
         <section className="review-evidence" aria-labelledby="ledger-answer-heading" aria-live="polite">
           <h3 id="ledger-answer-heading">Ledger answer</h3>
-          {answer.kind === 'unsupported' && <p>Choose one of the supported questions above. This view explains recorded evidence and estimates.</p>}
+          {answer.kind === 'unsupported' && (
+            <p>✨ <strong>Ask Sarvam AI:</strong> This is a custom question — scroll down to the <em>AI explanation</em> panel, check consent, and click <strong>Explain with Sarvam AI</strong> to get a contextual answer from your loaded ledger.</p>
+          )}
           {answer.kind === 'forecast' && (
             <>
               <p>{answer.entries.length} projected debits in {answer.days} days including today. These estimates assume observed patterns continue.</p>

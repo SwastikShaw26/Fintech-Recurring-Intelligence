@@ -31,6 +31,7 @@ from src.private_statement import (
     parse_statement, plan_statement_overlap, reconcile_refunds,
 )
 from .graph_routes import router as graph_router
+from src.assistant_routes import router as assistant_router
 
 ROOT = Path(__file__).resolve().parents[1]
 TRANSACTIONS_FILE = ROOT / "data" / "raw" / "synthetic_transactions.csv"
@@ -74,6 +75,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(graph_router, prefix="/api")
+app.include_router(assistant_router)
 
 @app.get("/api/summary/business")
 def business_summary_direct(analysis_id: Optional[str] = Query(None)):
@@ -841,8 +843,8 @@ async def private_statement(request: Request):
     host = request.url.hostname
     origin = request.headers.get("origin")
     same_origin = f"{request.url.scheme}://{request.url.netloc}"
-    if host not in {"localhost", "127.0.0.1", "::1", "testserver"} or (origin is not None and origin not in {same_origin, *DEFAULT_ALLOWED_ORIGINS}):
-        pass  # origin check relaxed for deployed mode
+    if origin is not None and origin not in {same_origin, *DEFAULT_ALLOWED_ORIGINS}:
+        raise HTTPException(status_code=403, detail="Private analysis is available from local FinSight only.")
     payload = await read_statement_request(request)
     try:
         return await run_in_threadpool(analyze_statement, payload)

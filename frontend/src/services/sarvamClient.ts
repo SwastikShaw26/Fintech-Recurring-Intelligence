@@ -2,8 +2,9 @@
 export type SarvamLanguage = 'en' | 'hi'
 
 export type SarvamEvidence =
-  | { evidence_type: 'forecast'; count: number; days: number }
-  | { evidence_type: 'review'; count: number }
+  | { evidence_type: 'forecast'; count: number; days: number; question?: string }
+  | { evidence_type: 'review'; count: number; question?: string }
+  | { evidence_type: 'custom'; count: number; question: string; context_summary?: string }
 
 type SarvamResponse = {
   explanation: string
@@ -16,18 +17,28 @@ export async function explainWithSarvam(
   language: SarvamLanguage,
   signal?: AbortSignal,
 ): Promise<string> {
+  const payload: Record<string, unknown> = {
+    evidence_type: evidence.evidence_type,
+    count: evidence.count,
+    language,
+    consent: true,
+  }
+  if (evidence.evidence_type === 'forecast') {
+    payload.days = evidence.days
+  }
+  if ('question' in evidence && evidence.question) {
+    payload.question = evidence.question
+  }
+  if ('context_summary' in evidence && evidence.context_summary) {
+    payload.context_summary = evidence.context_summary
+  }
+
   const response = await fetch('/api/assistant/explain', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      evidence_type: evidence.evidence_type,
-      count: evidence.count,
-      days: evidence.evidence_type === 'forecast' ? evidence.days : undefined,
-      language,
-      consent: true,
-    }),
+    body: JSON.stringify(payload),
     signal,
     credentials: 'same-origin',
   })
