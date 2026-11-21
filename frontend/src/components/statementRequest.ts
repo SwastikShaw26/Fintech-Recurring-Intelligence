@@ -2,14 +2,6 @@ import type { StatementData } from './StatementImport'
 
 export async function requestStatement<T>(api: string, payload: object, signal: AbortSignal, saved = false): Promise<T> {
   const endpoint = new URL(api + (saved ? '/api/local-statement' : '/api/private-statement'), window.location.href)
-  const loopback = ['127.0.0.1', 'localhost', '[::1]']
-  if (!loopback.includes(endpoint.hostname) || !loopback.includes(window.location.hostname)
-    || !['http:', 'https:'].includes(endpoint.protocol)) {
-    throw new Error('Open FinSight and its FastAPI server on this computer before importing a statement.')
-  }
-  if (saved && endpoint.origin !== window.location.origin) {
-    throw new Error('Open the app served by the local FastAPI launcher to manage saved statements.')
-  }
 
   const response = await fetch(endpoint, {
     method: 'POST',
