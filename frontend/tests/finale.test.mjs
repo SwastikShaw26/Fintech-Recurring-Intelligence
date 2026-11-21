@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { fetchGraphEvidence } from '../src/services/graphEvidence.ts'
-import { observedStatementWindow } from '../src/components/forecastReliability.ts'
+import * as reliability from '../src/components/forecastReliability.ts'
 import { publicMetadata } from '../src/publicMetadata.ts'
 
 test('graph lookup encodes scope and preserves the API merchant distinction', async t => {
@@ -27,10 +27,21 @@ test('graph HTTP errors and mismatched results cannot appear as evidence', async
 })
 
 test('observed window uses valid non-future dates and a labelled 90-day freshness threshold', () => {
+  const { observedStatementWindow } = reliability
   assert.deepEqual(observedStatementWindow([
     { date: '2026-01-01' }, { date: '2026-02-30' }, { date: '2027-01-01' }, { date: '2026-08-01' },
   ], '2026-11-21'), { first: '2026-01-01', last: '2026-08-01', ageDays: 112, stale: true })
   assert.equal(observedStatementWindow([], '2026-11-21'), null)
+})
+
+test('a commitment can carry a backend freshness warning before the statement-wide threshold', () => {
+  const reason = 'Last charge observed 75 days ago.'
+  assert.equal(reliability.commitmentFreshnessWarning({
+    last_observed_date: '2026-09-07',
+    forecast_quality: { staleness_warning: true, staleness_reason: reason },
+  }), reason)
+  assert.equal(reliability.commitmentFreshnessWarning({ forecast_quality: { staleness_warning: false } }), null)
+  assert.equal(reliability.commitmentFreshnessWarning({}), null)
 })
 
 test('public metadata indexes only the approved HTTPS homepage', () => {

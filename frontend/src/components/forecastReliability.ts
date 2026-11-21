@@ -1,6 +1,19 @@
 const dayMs = 86_400_000
 export const staleHistoryDays = 90
 
+export function commitmentFreshnessWarning(commitment: Record<string, unknown>) {
+  const quality = commitment.forecast_quality
+  if (!quality || typeof quality !== 'object' || !('staleness_warning' in quality)
+    || quality.staleness_warning !== true) return null
+  if (typeof commitment.last_observed_date !== 'string' || !commitment.last_observed_date) {
+    return 'Last supporting debit date is unavailable.'
+  }
+  const reason = 'staleness_reason' in quality ? quality.staleness_reason : null
+  return typeof reason === 'string' && reason.trim()
+    ? reason.trim()
+    : 'Recent supporting observations are limited.'
+}
+
 export function observedStatementWindow(rows: Record<string, unknown>[], asOf: string) {
   let first = ''
   let last = ''
