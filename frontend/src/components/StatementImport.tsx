@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { normalizedStatementCsv, requestAnalysis } from './statementRequest'
+import { normalizedStatementCsv } from './statementRequest'
 import { applyImportPreset, IMPORT_PRESETS, parseImportCsv, projectMappedCsv, selectImportFile, suggestImportMapping, type ImportCsv } from './importQuality'
 import './StatementImport.css'
 
@@ -49,11 +49,12 @@ const fields = [
   { key: 'payment_method', label: 'Payment method', required: false },
 ]
 
-export function StatementImport({ api, onAnalyze, existing, hostedToken }: {
-  api: string
+export function StatementImport({ request, onAnalyze, existing, hostedToken, redesigned = false }: {
+  request: <T>(payload: object, signal: AbortSignal) => Promise<T>
   onAnalyze: (data: StatementData) => void
   existing: StatementData | null
   hostedToken?: string
+  redesigned?: boolean
 }) {
   const parsed = useRef<ImportCsv | null>(null)
   const pending = useRef<AbortController | null>(null)
@@ -78,6 +79,11 @@ export function StatementImport({ api, onAnalyze, existing, hostedToken }: {
 
   const visibleFields = fields.filter(({ key }) => split
     ? !['amount', 'direction'].includes(key) : !['debit_amount', 'credit_amount'].includes(key))
+  const assignedFields = visibleFields.flatMap(({ key }) => (mapping[key] ?? -1) >= 0 ? [[key, mapping[key]] as const] : [])
+  const duplicateMapping = new Set(assignedFields.map(([, index]) => index)).size !== assignedFields.length
+  const missingRequired = visibleFields.filter(({ key, required }) => required && (mapping[key] ?? -1) < 0)
+  const ready = missingRequired.length === 0 && (!redesigned || !duplicateMapping)
+  const currentStage = !preview ? 'Choose CSV' : ready ? 'Analyze' : 'Map columns'
 
   function chooseFiles(files: File[]) {
     if (busy) return
@@ -111,7 +117,8 @@ export function StatementImport({ api, onAnalyze, existing, hostedToken }: {
     pending.current?.abort()
     pending.current = controller
     setBusy(true)
-    setPhase(file ? 'Reading CSV locally…' : merge ? 'Reviewing statement overlap…' : 'Analyzing mapped rows…')
+    setPhase(file ? 'Reading CSV locally…' : review ? 'Applying overlap decisions…'
+      : merge ? 'Reviewing statement overlap…' : 'Analyzing mapped rows…')
     setError('')
     if (file) {
       setSelectedFile({ name: file.name, size: file.size })
@@ -142,8 +149,7 @@ export function StatementImport({ api, onAnalyze, existing, hostedToken }: {
         return
       }
       if (!parsed.current) return
-      const selectedFields = Object.fromEntries(visibleFields.map(({ key }) => [key, mapping[key]])
-        .filter(([, index]) => typeof index === 'number' && index >= 0))
+      const selectedFields = Object.fromEntries(assignedFields)
       const mapped = projectMappedCsv(parsed.current, selectedFields)
       const payload = review ? { ...review.payload, overlap_excluded: excluded } : {
         csv: mapped.csv,
@@ -158,8 +164,8 @@ export function StatementImport({ api, onAnalyze, existing, hostedToken }: {
         } : {}),
       }
       if (merge && !review) {
-        const next = await requestAnalysis<{ overlap_review: OverlapReview }>(
-          api, { ...payload, overlap_preview: true }, controller.signal, hostedToken,
+        const next = await request<{ overlap_review: OverlapReview }>(
+          { ...payload, overlap_preview: true }, controller.signal,
         )
         if (!controller.signal.aborted) {
           setReview({ result: next.overlap_review, payload })
@@ -167,7 +173,7 @@ export function StatementImport({ api, onAnalyze, existing, hostedToken }: {
         }
         return
       }
-      const next = await requestAnalysis<StatementData>(api, payload, controller.signal, hostedToken)
+      const next = await request<StatementData>(payload, controller.signal)
       if (controller.signal.aborted) return
       parsed.current = null
       setPreview(null)
@@ -187,14 +193,17 @@ export function StatementImport({ api, onAnalyze, existing, hostedToken }: {
     }
   }
 
-  const ready = visibleFields.every(({ key, required }) => !required || (mapping[key] ?? -1) >= 0)
-
   return (
     <section className="panel statement-import" aria-labelledby="statement-import-title">
       <h2 id="statement-import-title">Import a bank statement</h2>
       <p>Choose a UTF-8 CSV with a header row. Preview stays in this tab. {hostedToken
         ? 'The hosted server receives only mapped columns when you review or analyze. Save explicitly to keep a mapped copy.'
         : 'The local server analyzes only mapped columns, and results stay in this tab until you clear it or reload.'}</p>
+      {redesigned && <ol className="import-stages" aria-label="Statement import stages">
+        {['Choose CSV', 'Map columns', 'Analyze'].map(stage => (
+          <li key={stage} aria-current={currentStage === stage ? 'step' : undefined}>{stage}</li>
+        ))}
+      </ol>}
       <div className={`statement-dropzone${dragActive ? ' is-dragging' : ''}`} role="region" aria-label="CSV dropzone" aria-busy={busy}
         onDragEnter={event => {
           event.preventDefault()
@@ -241,62 +250,70 @@ export function StatementImport({ api, onAnalyze, existing, hostedToken }: {
             Combine with the current statement. Both exports are for the same account and currency, and cover complete days.
           </label>}
           {merge && <p>Matching rows across exports are counted once per occurrence. Leave this unchecked if either export is filtered or covers only part of a day.</p>}
-          <div className="statement-preview" tabIndex={0} role="region" aria-label="Statement preview">
-            <table>
-              <thead><tr>{preview.columns.map((column, index) => <th key={index} scope="col">{column}</th>)}</tr></thead>
-              <tbody>{preview.sample.map((row, index) => <tr key={index}>{row.map((cell, column) => <td key={column}>{cell}</td>)}</tr>)}</tbody>
-            </table>
-          </div>
-          <fieldset className="statement-mapping" disabled={busy || !!review}>
-            <legend>Column mapping</legend>
-            <label>CSV layout preset
-              <select value={presetId} onChange={event => {
-                const id = event.target.value
-                setPresetId(id)
-                const preset = IMPORT_PRESETS.find(item => item.id === id)
-                if (!preset) return
-                setMapping(applyImportPreset(preview.columns, preset))
-                setDateFormat(preset.dateFormat)
-                setSign(preset.sign)
-                setSplit(preset.split)
-              }}>
-                <option value="">Custom mapping</option>
-                {IMPORT_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
-              </select>
-            </label>
-            <label>Amount layout
-              <select aria-label="Amount layout" value={split ? 'split' : 'single'}
-                onChange={event => setSplit(event.target.value === 'split')}>
-                <option value="single">One amount column</option><option value="split">Separate debit and credit columns</option>
-              </select>
-            </label>
-            <label>Statement currency
-              <select aria-label="Statement currency" value={merge && existing ? String(existing.summary.currency) : currency}
-                disabled={merge} onChange={event => setCurrency(event.target.value)}>
-                <option value="INR">INR</option><option value="GBP">GBP</option><option value="USD">USD</option>
-                <option value="EUR">EUR</option><option value="unspecified">Unspecified (statement units)</option>
-              </select>
-            </label>
-            {visibleFields.map(({ key, label, required }) => (
-              <label key={key}>{label}
-                <select aria-label={label} required={required} value={(mapping[key] ?? -1) < 0 ? '' : mapping[key]}
-                  onChange={event => setMapping(previous => ({ ...previous, [key]: event.target.value === '' ? -1 : Number(event.target.value) }))}>
-                  <option value="">{required ? 'Choose a column' : 'No column'}</option>
-                  {preview.columns.map((column, index) => <option key={index} value={index}>{column}</option>)}
+          <div className={redesigned ? 'import-mapping-grid' : undefined}>
+            <div className="statement-preview" tabIndex={0} role="region" aria-label="Statement preview">
+              <table>
+                <thead><tr>{preview.columns.map((column, index) => <th key={index} scope="col">{column}</th>)}</tr></thead>
+                <tbody>{preview.sample.map((row, index) => <tr key={index}>{row.map((cell, column) => <td key={column}>{cell}</td>)}</tr>)}</tbody>
+              </table>
+            </div>
+            <fieldset className="statement-mapping" aria-describedby={redesigned ? 'import-mapping-status' : undefined}
+              disabled={busy || !!review}>
+              <legend>Column mapping</legend>
+              <label>CSV layout preset
+                <select value={presetId} onChange={event => {
+                  const id = event.target.value
+                  setPresetId(id)
+                  const preset = IMPORT_PRESETS.find(item => item.id === id)
+                  if (!preset) return
+                  setMapping(applyImportPreset(preview.columns, preset))
+                  setDateFormat(preset.dateFormat)
+                  setSign(preset.sign)
+                  setSplit(preset.split)
+                }}>
+                  <option value="">Custom mapping</option>
+                  {IMPORT_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
                 </select>
               </label>
-            ))}
-            <label>Date format
-              <select aria-label="Date format" value={dateFormat} onChange={event => setDateFormat(event.target.value)}>
-                <option value="iso">YYYY-MM-DD</option><option value="dmy">DD/MM/YYYY</option><option value="mdy">MM/DD/YYYY</option>
-              </select>
-            </label>
-            {!split && (mapping.direction ?? -1) < 0 && <label>Amount sign
-              <select aria-label="Amount sign" value={sign} onChange={event => setSign(event.target.value)}>
-                <option value="negative_debit">Debits are negative</option><option value="positive_debit">Debits are positive</option>
-              </select>
-            </label>}
-          </fieldset>
+              <label>Amount layout
+                <select aria-label="Amount layout" value={split ? 'split' : 'single'}
+                  onChange={event => setSplit(event.target.value === 'split')}>
+                  <option value="single">One amount column</option><option value="split">Separate debit and credit columns</option>
+                </select>
+              </label>
+              <label>Statement currency
+                <select aria-label="Statement currency" value={merge && existing ? String(existing.summary.currency) : currency}
+                  disabled={merge} onChange={event => setCurrency(event.target.value)}>
+                  <option value="INR">INR</option><option value="GBP">GBP</option><option value="USD">USD</option>
+                  <option value="EUR">EUR</option><option value="unspecified">Unspecified (statement units)</option>
+                </select>
+              </label>
+              {visibleFields.map(({ key, label, required }) => (
+                <label key={key}>{label}
+                  <select aria-label={label} required={required} value={(mapping[key] ?? -1) < 0 ? '' : mapping[key]}
+                    onChange={event => setMapping(previous => ({ ...previous, [key]: event.target.value === '' ? -1 : Number(event.target.value) }))}>
+                    <option value="">{required ? 'Choose a column' : 'No column'}</option>
+                    {preview.columns.map((column, index) => <option key={index} value={index}>{column}</option>)}
+                  </select>
+                </label>
+              ))}
+              <label>Date format
+                <select aria-label="Date format" value={dateFormat} onChange={event => setDateFormat(event.target.value)}>
+                  <option value="iso">YYYY-MM-DD</option><option value="dmy">DD/MM/YYYY</option><option value="mdy">MM/DD/YYYY</option>
+                </select>
+              </label>
+              {!split && (mapping.direction ?? -1) < 0 && <label>Amount sign
+                <select aria-label="Amount sign" value={sign} onChange={event => setSign(event.target.value)}>
+                  <option value="negative_debit">Debits are negative</option><option value="positive_debit">Debits are positive</option>
+                </select>
+              </label>}
+            </fieldset>
+          </div>
+          {redesigned && <p id="import-mapping-status" role="status" className={duplicateMapping ? 'statement-error' : undefined}>
+            {duplicateMapping ? 'Choose a different CSV column for each mapped field.'
+              : missingRequired.length ? `Map required columns: ${missingRequired.map(field => field.label).join(', ')}.`
+                : 'Required columns mapped. Your statement is ready to analyze.'}
+          </p>}
           {review && <section className="review-evidence" aria-labelledby="overlap-review-title">
             <h3 id="overlap-review-title">Review overlapping rows</h3>
             <p role="status">{review.result.exact_matches} exact matches to skip, {review.result.new_rows} other rows to add, and {review.result.ambiguous_count} possible conflicts.</p>

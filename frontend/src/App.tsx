@@ -29,7 +29,7 @@ import { StatementImport, type StatementData } from './components/StatementImpor
 import { MerchantReview } from './components/MerchantReview'
 import { SavedStatement } from './components/SavedStatement'
 import { HostedWorkspace } from './components/HostedWorkspace'
-import { revokeHostedSession } from './components/statementRequest'
+import { requestAnalysis, revokeHostedSession } from './components/statementRequest'
 import { ForecastPanel } from './components/ForecastPanel'
 import { ForecastCard } from './components/ForecastCard'
 import { CommitmentBreakdown } from './components/CommitmentBreakdown'
@@ -770,7 +770,8 @@ export default function App() {
           {page === 'Import statement' && (
             <>
               {HOSTED && hostedSignOutError && <div role="alert" className="error-banner"><p>{hostedSignOutError}</p></div>}
-              {(!HOSTED || hostedToken) && <StatementImport api={API} existing={statement} hostedToken={hostedToken} onAnalyze={(next) => {
+              {(!HOSTED || hostedToken) && <StatementImport redesigned={redesigned} existing={statement} hostedToken={hostedToken}
+                request={(payload, signal) => requestAnalysis(API, payload, signal, hostedToken)} onAnalyze={(next) => {
                 if (HOSTED && hostedSession !== activeHostedSession.current) return
                 if (statement?.analysis_id === next.analysis_id) {
                   updateMerchantLinks(statement, next)

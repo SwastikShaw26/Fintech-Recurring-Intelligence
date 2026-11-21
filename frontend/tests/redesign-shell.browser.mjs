@@ -36,6 +36,8 @@ try {
   await redesigned.click()
 
   await navigation.getByRole('button', { name: 'Import statement' }).click()
+  const stages = page.getByRole('list', { name: 'Statement import stages' })
+  assert.equal(await stages.locator('[aria-current="step"]').innerText(), 'Choose CSV')
   const today = new Date()
   const billDay = today.getUTCDate() <= 23 ? today.getUTCDate() + 5 : 2
   const charges = [-3, -2, -1].map(month =>
@@ -51,7 +53,11 @@ try {
   })
   await page.getByLabel('Date', { exact: true }).selectOption('0')
   await page.getByLabel('Merchant or description').selectOption('1')
+  await page.getByLabel('Amount', { exact: true }).selectOption('0')
+  await page.getByText('Choose a different CSV column for each mapped field.', { exact: true }).waitFor()
+  assert.equal(await page.getByRole('button', { name: 'Analyze statement' }).isDisabled(), true)
   await page.getByLabel('Amount', { exact: true }).selectOption('2')
+  assert.equal(await stages.locator('[aria-current="step"]').innerText(), 'Analyze')
   await classic.click()
   assert.equal(await page.getByLabel('Merchant or description').inputValue(), '1')
   await page.getByRole('button', { name: 'Analyze statement' }).click()
