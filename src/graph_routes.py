@@ -90,7 +90,7 @@ async def list_classified_commitments(
 
 
 @router.get("/summary/business")
-def get_business_summary(analysis_id: str):
+def get_business_summary(analysis_id: Optional[str] = Query(None)):
     if not analysis_id or not analysis_id.strip():
         raise HTTPException(status_code=400, detail="analysis_id is required.")
 

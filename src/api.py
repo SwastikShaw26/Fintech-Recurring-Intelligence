@@ -75,6 +75,13 @@ app = FastAPI(
 )
 app.include_router(graph_router, prefix="/api")
 
+@app.get("/api/summary/business")
+def business_summary_direct(analysis_id: Optional[str] = Query(None)):
+    from .graph_routes import get_business_summary
+    return get_business_summary(analysis_id=analysis_id)
+
+
+
 DEFAULT_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -829,13 +836,50 @@ async def private_statement(request: Request):
 
 
 async def read_statement_request(request):
-    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/json":
+    content_type_header = request.headers.get("content-type", "")
+    content_type = content_type_header.split(";", 1)[0].strip().lower()
+    if content_type not in ("application/json", "multipart/form-data"):
         raise HTTPException(status_code=415, detail="Expected a JSON statement request.")
+    
     body = bytearray()
     async for chunk in request.stream():
         if len(body) + len(chunk) > MAX_REQUEST_BYTES:
             raise HTTPException(status_code=413, detail="The statement exceeds the import limit.")
         body.extend(chunk)
+
+    if content_type == "multipart/form-data":
+        # Parse multipart body boundary without requiring external python-multipart
+        boundary = None
+        for part in content_type_header.split(";"):
+            if "boundary=" in part:
+                boundary = part.split("boundary=")[1].strip().strip('"').encode("ascii")
+                break
+        if not boundary:
+            raise HTTPException(status_code=400, detail="Invalid multipart boundary.")
+
+        delimiter = b"--" + boundary
+        parts = body.split(delimiter)
+        file_content = None
+        for part in parts:
+            if b'filename="' in part:
+                header_end = part.find(b"\r\n\r\n")
+                if header_end != -1:
+                    data = part[header_end + 4:]
+                    if data.endswith(b"\r\n"):
+                        data = data[:-2]
+                    file_content = data
+                    break
+
+        if file_content is None:
+            raise HTTPException(status_code=400, detail="Missing file in upload.")
+        try:
+            csv_text = file_content.decode("utf-8")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="Choose a UTF-8 CSV statement.")
+        if not csv_text.strip():
+            raise HTTPException(status_code=400, detail="The statement has no transactions.")
+        return {"csv": csv_text}
+
     try:
         return json.loads(body)
     except (ValueError, RecursionError):
