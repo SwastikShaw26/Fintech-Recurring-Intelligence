@@ -122,7 +122,7 @@ function evidenceText(alert: AnyRecord): string {
 
 export default function App() {
   const [page, setPage] = useState('Overview')
-  const [layout, setLayout] = useState<Layout>('Redesigned')
+  const [layout, setLayout] = useState<Layout>('Classic')
   const redesigned = layout === 'Redesigned'
   const [demoSummary, setSummary] = useState<AnyRecord>({})
   const [demoTransactions, setTransactions] = useState<AnyRecord[]>([])

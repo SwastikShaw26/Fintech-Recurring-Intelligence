@@ -44,13 +44,13 @@ export function AuthModal() {
     <div className="modal-backdrop" onClick={closeAuthModal} style={{
       position: 'fixed',
       inset: 0,
-      backgroundColor: 'rgba(5, 7, 12, 0.78)',
-      backdropFilter: 'blur(8px)',
+      backgroundColor: 'var(--scrim)',
+      backdropFilter: 'blur(4px)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 9999,
-      padding: '1rem',
+      padding: 'var(--space-4)',
     }}>
       <div 
         className="auth-modal-card" 
@@ -58,12 +58,12 @@ export function AuthModal() {
         style={{
           width: '100%',
           maxWidth: '440px',
-          background: 'linear-gradient(180deg, #161b26 0%, #0d111a 100%)',
-          border: '1px solid rgba(255, 255, 255, 0.12)',
-          borderRadius: '16px',
-          boxShadow: '0 24px 64px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05)',
-          padding: '2rem',
-          color: '#f0f3f8',
+          background: 'var(--paper)',
+          border: '1px solid var(--rule-strong)',
+          borderRadius: 'var(--radius-panel)',
+          boxShadow: 'var(--shadow-dialog)',
+          padding: 'var(--space-6)',
+          color: 'var(--ink)',
           position: 'relative'
         }}
       >
@@ -71,11 +71,11 @@ export function AuthModal() {
           onClick={closeAuthModal} 
           style={{
             position: 'absolute',
-            top: '1.25rem',
-            right: '1.25rem',
+            top: 'var(--space-4)',
+            right: 'var(--space-4)',
             background: 'none',
             border: 'none',
-            color: '#8b949e',
+            color: 'var(--muted)',
             cursor: 'pointer',
             padding: '4px'
           }}
@@ -83,21 +83,21 @@ export function AuthModal() {
           <X size={20} />
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
           <div style={{
-            background: 'rgba(56, 189, 248, 0.12)',
-            padding: '0.5rem',
-            borderRadius: '10px',
-            color: '#38bdf8',
+            background: 'var(--evergreen-soft)',
+            padding: 'var(--space-2)',
+            borderRadius: 'var(--radius-control)',
+            color: 'var(--evergreen)',
             display: 'flex'
           }}>
             <ShieldCheck size={24} />
           </div>
           <div>
-            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600 }}>
+            <h2 style={{ margin: 0, fontSize: 'var(--text-xl)', fontFamily: 'var(--font-display)', fontWeight: 400 }}>
               {modalMode === 'login' ? 'Sign in to FinSight' : 'Create an Account'}
             </h2>
-            <p style={{ margin: 0, fontSize: '0.8125rem', color: '#94a3b8' }}>
+            <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>
               {modalMode === 'login' ? 'Access your private Neo4j financial graph' : 'Isolate your commitments into your own private Aura graph'}
             </p>
           </div>
@@ -105,24 +105,24 @@ export function AuthModal() {
 
         {error && (
           <div style={{
-            background: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: '8px',
-            padding: '0.75rem 1rem',
-            marginBottom: '1.25rem',
-            fontSize: '0.85rem',
-            color: '#f87171'
+            background: 'var(--attention-wash)',
+            border: '1px solid var(--attention)',
+            borderRadius: 'var(--radius-control)',
+            padding: 'var(--space-2) var(--space-3)',
+            marginBottom: 'var(--space-4)',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--attention)'
           }}>
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
           {modalMode === 'register' && (
             <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '0.375rem' }}>Full Name</label>
+              <label style={{ display: 'block', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--ink)', marginBottom: 'var(--space-1)' }}>Full Name</label>
               <div style={{ position: 'relative' }}>
-                <UserIcon size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: '#64748b' }} />
+                <UserIcon size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--muted)' }} />
                 <input
                   type="text"
                   required
@@ -131,12 +131,12 @@ export function AuthModal() {
                   onChange={(e) => setFullName(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '0.625rem 0.75rem 0.625rem 2.25rem',
-                    background: 'rgba(15, 23, 42, 0.6)',
-                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                    borderRadius: '8px',
-                    color: '#fff',
-                    fontSize: '0.9rem',
+                    padding: '8px 12px 8px 36px',
+                    background: 'var(--canvas)',
+                    border: '1px solid var(--rule-strong)',
+                    borderRadius: 'var(--radius-control)',
+                    color: 'var(--ink)',
+                    fontSize: 'var(--text-sm)',
                     outline: 'none',
                     boxSizing: 'border-box'
                   }}
@@ -146,9 +146,9 @@ export function AuthModal() {
           )}
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '0.375rem' }}>Email Address</label>
+            <label style={{ display: 'block', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--ink)', marginBottom: 'var(--space-1)' }}>Email Address</label>
             <div style={{ position: 'relative' }}>
-              <Mail size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: '#64748b' }} />
+              <Mail size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--muted)' }} />
               <input
                 type="email"
                 required
@@ -157,12 +157,12 @@ export function AuthModal() {
                 onChange={(e) => setEmail(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '0.625rem 0.75rem 0.625rem 2.25rem',
-                  background: 'rgba(15, 23, 42, 0.6)',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: '8px',
-                  color: '#fff',
-                  fontSize: '0.9rem',
+                  padding: '8px 12px 8px 36px',
+                  background: 'var(--canvas)',
+                  border: '1px solid var(--rule-strong)',
+                  borderRadius: 'var(--radius-control)',
+                  color: 'var(--ink)',
+                  fontSize: 'var(--text-sm)',
                   outline: 'none',
                   boxSizing: 'border-box'
                 }}
@@ -171,9 +171,9 @@ export function AuthModal() {
           </div>
 
           <div>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '0.375rem' }}>Password</label>
+            <label style={{ display: 'block', fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--ink)', marginBottom: 'var(--space-1)' }}>Password</label>
             <div style={{ position: 'relative' }}>
-              <Lock size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: '#64748b' }} />
+              <Lock size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--muted)' }} />
               <input
                 type="password"
                 required
@@ -182,12 +182,12 @@ export function AuthModal() {
                 onChange={(e) => setPassword(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '0.625rem 0.75rem 0.625rem 2.25rem',
-                  background: 'rgba(15, 23, 42, 0.6)',
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  borderRadius: '8px',
-                  color: '#fff',
-                  fontSize: '0.9rem',
+                  padding: '8px 12px 8px 36px',
+                  background: 'var(--canvas)',
+                  border: '1px solid var(--rule-strong)',
+                  borderRadius: 'var(--radius-control)',
+                  color: 'var(--ink)',
+                  fontSize: 'var(--text-sm)',
                   outline: 'none',
                   boxSizing: 'border-box'
                 }}
@@ -199,20 +199,19 @@ export function AuthModal() {
             type="submit"
             disabled={loading}
             style={{
-              marginTop: '0.5rem',
+              marginTop: 'var(--space-2)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '0.5rem',
-              padding: '0.75rem',
-              background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
-              border: '1px solid rgba(56, 189, 248, 0.3)',
-              borderRadius: '8px',
-              color: '#ffffff',
-              fontSize: '0.95rem',
-              fontWeight: 500,
+              gap: 'var(--space-2)',
+              padding: '10px 16px',
+              background: 'var(--evergreen)',
+              border: '1px solid var(--evergreen)',
+              borderRadius: 'var(--radius-control)',
+              color: 'var(--paper)',
+              fontSize: 'var(--text-sm)',
+              fontWeight: 600,
               cursor: loading ? 'not-allowed' : 'pointer',
-              boxShadow: '0 4px 14px rgba(2, 132, 199, 0.35)',
               transition: 'all 0.15s ease'
             }}
           >
@@ -221,14 +220,14 @@ export function AuthModal() {
           </button>
         </form>
 
-        <div style={{ marginTop: '1.5rem', textAlign: 'center', fontSize: '0.8125rem', color: '#94a3b8' }}>
+        <div style={{ marginTop: 'var(--space-4)', textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>
           {modalMode === 'login' ? (
             <>
               Don't have an account?{' '}
               <button
                 type="button"
                 onClick={() => { setError(null); setModalMode('register'); }}
-                style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontWeight: 500 }}
+                style={{ background: 'none', border: 'none', color: 'var(--evergreen)', cursor: 'pointer', padding: 0, fontWeight: 600 }}
               >
                 Sign up free
               </button>
@@ -239,7 +238,7 @@ export function AuthModal() {
               <button
                 type="button"
                 onClick={() => { setError(null); setModalMode('login'); }}
-                style={{ background: 'none', border: 'none', color: '#38bdf8', cursor: 'pointer', padding: 0, fontWeight: 500 }}
+                style={{ background: 'none', border: 'none', color: 'var(--evergreen)', cursor: 'pointer', padding: 0, fontWeight: 600 }}
               >
                 Sign in
               </button>
