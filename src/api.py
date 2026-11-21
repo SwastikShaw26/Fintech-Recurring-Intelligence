@@ -766,7 +766,7 @@ def analyze_statement(payload):
     refunds = reconcile_refunds(raw, aliases)
     for transaction in transactions:
         transaction.update(refunds.get(transaction["transaction_id"], {}))
-        commitments = build_commitments(transactions, candidates, currency)
+    commitments = build_commitments(transactions, candidates, currency)
 
     # Neo4j graph ingestion — non-blocking, never raises
     try:

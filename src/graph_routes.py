@@ -103,10 +103,19 @@ def get_business_summary(analysis_id: Optional[str] = Query(None)):
 
     total_commitments = len(classified)
     commitment_ids = [entry["commitment_id"] for entry in classified]
+    total_estimated_spend = round(
+        sum(
+            float(entry.get("typical_amount") or 0.0)
+            for entry in classified
+            if entry.get("typical_amount") is not None
+        ),
+        2,
+    )
 
     return {
         "analysis_id": analysis_id,
         "total_business_commitments": total_commitments,
         "commitment_ids": commitment_ids,
+        "total_estimated_spend": total_estimated_spend,
     }
 
