@@ -20,6 +20,9 @@ COPY data/raw/synthetic_transactions.csv data/raw/ground_truth_labels.csv \
 RUN python -m src.detect_recurring_v3
 COPY --from=frontend /build/dist frontend/dist/
 
+# Ensure non-root user 10001 owns data directory for user database & secrets
+RUN mkdir -p /app/data && chown -R 10001:10001 /app/data
+
 USER 10001:10001
 EXPOSE 8000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s \

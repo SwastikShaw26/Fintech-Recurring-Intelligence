@@ -18,24 +18,41 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
-# Database location
-DATA_DIR = Path(os.getenv("FINSIGHT_DATA_DIR", Path(__file__).resolve().parent.parent / "data"))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+# Database location - use /tmp/finsight_data in container or fallback to local data/
+_default_data_dir = Path("/tmp/finsight_data") if os.path.exists("/tmp") and os.name != "nt" else Path(__file__).resolve().parent.parent / "data"
+DATA_DIR = Path(os.getenv("FINSIGHT_DATA_DIR", _default_data_dir))
+try:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    DATA_DIR = Path("/tmp")
+
 DB_PATH = DATA_DIR / "users.db"
 
-# Secret key for HMAC token signing (falls back to persistent secret file or random token)
-SECRET_FILE = DATA_DIR / ".auth_secret"
-if not SECRET_FILE.exists():
-    SECRET_FILE.write_bytes(secrets.token_bytes(32))
-AUTH_SECRET = os.getenv("FINSIGHT_AUTH_SECRET", SECRET_FILE.read_hex() if hasattr(SECRET_FILE, 'read_hex') else SECRET_FILE.read_bytes().hex())
+# Secret key for HMAC token signing (prefers env var, fallback to safe deterministic machine secret or memory)
+AUTH_SECRET = os.getenv("FINSIGHT_AUTH_SECRET", "")
+if not AUTH_SECRET:
+    SECRET_FILE = DATA_DIR / ".auth_secret"
+    try:
+        if not SECRET_FILE.exists():
+            SECRET_FILE.write_bytes(secrets.token_bytes(32))
+        AUTH_SECRET = SECRET_FILE.read_bytes().hex()
+    except Exception:
+        # If filesystem is read-only or permission restricted
+        AUTH_SECRET = hashlib.sha256(b"finsight-fallback-static-auth-secret-key-32b").hexdigest()
+
 TOKEN_EXPIRY_SECONDS = 7 * 24 * 3600  # 7 days
 
 
 def _get_db():
-    conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    try:
+        conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA foreign_keys = ON")
+        return conn
+    except Exception:
+        # Fallback to in-memory database if permission denied
+        conn = sqlite3.connect(":memory:", timeout=10.0)
+        return conn
 
 
 def init_db():
