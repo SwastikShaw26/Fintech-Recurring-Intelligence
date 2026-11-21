@@ -283,3 +283,10 @@ Independent review caught a stale list entry after deleting through a Unicode-eq
 - Integrated build, lint, 68 local Python tests and 24 frontend tests passed. Disposable PostgreSQL 18.6 passed 23 hosted tests. Hosted HTTPS Chromium verified mapped-only uploads and the account history comparison and replacement. Mobile Chromium verified the calendar download.
 - Final local Chromium passed cash planner interaction, scoped revocation activity download, merchant review, two-stage overlap review and SQLite save/restore. Duplicate React keys in the import view caused stale controls during the initial run. The feature components now use distinct keys.
 - OFX remains a follow-up. The Import Quality Center currently supports CSV. The planner estimates selected recurring debits only. Calendar provider import and sync were outside browser verification.
+
+## Sarvam explanations
+
+- Ask FinSight offers English and Hindi explanations after consent. The client allowlists aggregate evidence and cancels obsolete requests. The existing ledger evidence remains available during generation and provider errors.
+- Both local launchers use the Sarvam wrapper. The wrapper runs the existing FastAPI lifespan on the mounted app. The default provider model is `sarvam-105b-conversations`.
+- The frontend production build and targeted ESLint passed, along with 26 frontend tests. The Python suite reported `73 passed, 1 skipped, 1 warning`. The Vite proxy returned HTTP 200 for health, 403 for missing consent, and 503 when the provider key was absent.
+- Headless Chrome with stubbed responses verified consent gating, loading, stale-response suppression, Hindi display, the minimal request payload, and the provider-error fallback. The backend test verified the outgoing aggregate prompt. Live generation requires a server-side `SARVAM_API_KEY`.

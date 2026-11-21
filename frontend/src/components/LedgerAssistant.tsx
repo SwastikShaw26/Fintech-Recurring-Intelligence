@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { explainWithSarvam, type SarvamEvidence, type SarvamLanguage } from '../services/sarvamClient'
 import { answerLedgerQuestion, ledgerQuestions } from './ledgerAnswers'
 import { buildCommitmentForecast } from './milestones'
 
@@ -17,7 +18,18 @@ export function LedgerAssistant({ commitments, transactions, alerts, formatAmoun
   const [question, setQuestion] = useState('')
   const [submitted, setSubmitted] = useState('')
   const today = indiaDate.format(new Date())
-  const answer = submitted ? answerLedgerQuestion(submitted, today, buildCommitmentForecast(commitments, today).entries, alerts) : null
+  const answer = useMemo(() => submitted
+    ? answerLedgerQuestion(submitted, today, buildCommitmentForecast(commitments, today).entries, alerts)
+    : null, [submitted, today, commitments, alerts])
+  const evidence = useMemo<SarvamEvidence | null>(() => {
+    if (answer?.kind === 'forecast') {
+      return { evidence_type: 'forecast', count: answer.entries.length, days: answer.days }
+    }
+    if (answer?.kind === 'review') {
+      return { evidence_type: 'review', count: answer.alerts.length }
+    }
+    return null
+  }, [answer])
   const byTransaction = new Map(transactions.map(row => [row.transaction_id, row]))
   const byCommitment = new Map(commitments.map(row => [row.commitment_id, row]))
 
@@ -87,6 +99,81 @@ export function LedgerAssistant({ commitments, transactions, alerts, formatAmoun
           )}
         </section>
       )}
+      {evidence && <LedgerExplanation evidence={evidence} />}
+    </section>
+  )
+}
+
+type ExplanationState =
+  | { status: 'loading' }
+  | { status: 'success'; text: string }
+  | { status: 'error'; text: string }
+
+function LedgerExplanation({ evidence }: { evidence: SarvamEvidence }) {
+  const [language, setLanguage] = useState<SarvamLanguage>('en')
+  const [consent, setConsent] = useState(false)
+  const [result, setResult] = useState<{ evidence: SarvamEvidence; state: ExplanationState } | null>(null)
+  const request = useRef<AbortController | null>(null)
+  const state = result?.evidence === evidence ? result.state : null
+
+  useLayoutEffect(() => {
+    return () => request.current?.abort()
+  }, [evidence])
+
+  function clearExplanation() {
+    request.current?.abort()
+    setResult(null)
+  }
+
+  async function generateExplanation() {
+    if (!consent) return
+    request.current?.abort()
+    const controller = new AbortController()
+    request.current = controller
+    setResult({ evidence, state: { status: 'loading' } })
+    try {
+      const text = await explainWithSarvam(evidence, language, controller.signal)
+      if (!controller.signal.aborted) {
+        setResult({ evidence, state: { status: 'success', text } })
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        const text = error instanceof Error ? error.message : 'Unable to generate an AI explanation.'
+        setResult({ evidence, state: { status: 'error', text } })
+      }
+    } finally {
+      if (request.current === controller) request.current = null
+    }
+  }
+
+  return (
+    <section className="review-evidence" aria-labelledby="ledger-ai-heading">
+      <h3 id="ledger-ai-heading">AI explanation</h3>
+      <div className="statement-mapping">
+        <label>Explanation language
+          <select value={language} onChange={event => {
+            clearExplanation()
+            setLanguage(event.target.value === 'hi' ? 'hi' : 'en')
+          }}>
+            <option value="en">English</option>
+            <option value="hi" lang="hi">हिन्दी</option>
+          </select>
+        </label>
+      </div>
+      <p><label>
+        <input type="checkbox" checked={consent} onChange={event => {
+          clearExplanation()
+          setConsent(event.target.checked)
+        }} />
+        {' '}I agree to share the evidence type, count, and any forecast window with Sarvam AI.
+      </label></p>
+      <button type="button" className="secondary-button" disabled={!consent || state?.status === 'loading'}
+        onClick={generateExplanation}>Explain with Sarvam AI</button>
+      <div role="status">
+        {state?.status === 'loading' && <p>Generating explanation…</p>}
+        {state?.status === 'success' && <p lang={language}>{state.text}</p>}
+      </div>
+      {state?.status === 'error' && <p role="alert">{state.text}</p>}
     </section>
   )
 }

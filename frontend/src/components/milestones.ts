@@ -1,4 +1,5 @@
 type RecordData = Record<string, unknown>
+export const shortHistoryObservations = 4
 
 export interface Milestone {
   id: string
@@ -73,7 +74,7 @@ export function buildCommitmentForecast(commitments: RecordData[], asOf: string)
     const uncertainty = []
     const ageDays = (Date.parse(asOf) - Date.parse(String(commitment.last_observed_date))) / 86_400_000
     if (frequency && ageDays > 2 * 31 * (12 / frequency)) uncertainty.push('No recent supporting debit')
-    if (typeof commitment.transaction_count !== 'number' || commitment.transaction_count < 4) uncertainty.push('Short payment history')
+    if (typeof commitment.transaction_count !== 'number' || commitment.transaction_count < shortHistoryObservations) uncertainty.push('Short payment history')
     if (commitment.amount_pattern === 'variable') uncertainty.push('Observed amounts vary')
     if (amount === null) uncertainty.push('Amount unavailable')
     while (next && next < end) {
