@@ -31,6 +31,7 @@ from src.private_statement import (
     parse_statement, plan_statement_overlap, reconcile_refunds,
 )
 from .graph_routes import router as graph_router
+from src.assistant_routes import router as assistant_router
 
 ROOT = Path(__file__).resolve().parents[1]
 TRANSACTIONS_FILE = ROOT / "data" / "raw" / "synthetic_transactions.csv"
@@ -74,6 +75,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(graph_router, prefix="/api")
+app.include_router(assistant_router)
 
 @app.get("/api/summary/business")
 def business_summary_direct(analysis_id: Optional[str] = Query(None)):
