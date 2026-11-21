@@ -79,6 +79,33 @@ try {
   await page.getByRole('heading', { name: '30-day debit calendar' }).waitFor()
   await page.locator('.forecast-calendar').getByRole('button', { name: 'Demo Studio' }).waitFor()
 
+  for (const [account, currency] of [['Demo Household', 'INR'], ['Demo Workspace', 'USD']]) {
+    const saved = await page.request.post(`${origin}/api/local-statement`, {
+      headers: { Origin: origin },
+      data: { action: 'save', account, statement: {
+        currency,
+        csv: ['date,description,amount', ...charges.map(date => `${date},Synthetic service,-25`)].join('\n'),
+        mapping: { date: 0, description: 1, amount: 2 },
+      } },
+    })
+    assert.equal(saved.status(), 200)
+  }
+  const workspace = page.locator('.workspace-selector')
+  await workspace.locator('summary').click()
+  await workspace.getByRole('button', { name: 'List saved workspaces' }).click()
+  const comparison = workspace.getByRole('region', { name: 'Household workspace comparison' })
+  await comparison.getByRole('checkbox', { name: 'Demo Household' }).check()
+  await comparison.getByRole('checkbox', { name: 'Demo Workspace' }).check()
+  await comparison.getByRole('button', { name: 'Compare recurring commitments' }).click()
+  await comparison.getByRole('heading', { name: 'INR', exact: true }).waitFor()
+  await comparison.getByRole('heading', { name: 'USD', exact: true }).waitFor()
+  assert.equal(await comparison.locator('time').count(), 2)
+  await workspace.getByLabel('Saved workspace').selectOption('Demo Workspace')
+  page.once('dialog', dialog => void dialog.accept())
+  await workspace.getByRole('button', { name: 'Open saved workspace' }).click()
+  await workspace.getByText('Workspace · Demo Workspace', { exact: true }).waitFor()
+  await navigation.getByRole('button', { name: 'Forecast', exact: true }).click()
+
   await page.setViewportSize({ width: 320, height: 720 })
   await classic.click()
   await redesigned.click()

@@ -16,7 +16,8 @@ import { BenchmarkDashboard } from './components/BenchmarkDashboard'
 import { AppShell, type Layout } from './components/AppShell'
 import { CommitmentList, LedgerKpis, ObservedEvidence } from './components/LedgerDashboard'
 import { commitmentCards, ledgerCurrency, ledgerKpis, linkedDebits } from './components/ledgerViewModel'
-import { readDemoEvidence, readDemoWorkspace } from './services/workspaceRead'
+import { readDemoEvidence, readDemoWorkspace, workspaceRequest } from './services/workspaceRead'
+import { WorkspaceSelector } from './components/WorkspaceSelector'
 import { AlertCards } from './components/AlertCards'
 import { buildAlertCards } from './components/alertCardsModel'
 import { SarvamEvidenceContext } from './components/SarvamEvidenceContext'
@@ -408,6 +409,12 @@ export default function App() {
       <AppShell page={page} pageLabel={pageLabel} navItems={navItems} onNavigate={setPage}
         commitmentCount={commitments.length} privateMode={privateMode} layout={layout} onLayoutChange={setLayout}>
         <div className="page-content">
+          {redesigned && <WorkspaceSelector key={hostedSession}
+            mode={HOSTED ? 'hosted' : import.meta.env.VITE_FINSIGHT_DEMO === 'true' ? 'demo' : 'local'}
+            request={workspaceRequest(API, HOSTED, hostedToken)} connected={Boolean(hostedToken)}
+            statement={statement} onSwitch={data => {
+              if (!HOSTED || hostedSession === activeHostedSession.current) changeStatement(data)
+            }} onImport={() => setPage('Import statement')} />}
           <section className="welcome-row">
             <div>
               <h1>

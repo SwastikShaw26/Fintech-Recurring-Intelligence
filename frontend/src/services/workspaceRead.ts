@@ -1,3 +1,13 @@
+import { requestHostedStatement, requestStatement } from '../components/statementRequest'
+
+export type WorkspaceRequest = <T>(payload: object, signal: AbortSignal) => Promise<T>
+
+export function workspaceRequest(base: string, hosted: boolean, token: string): WorkspaceRequest {
+  return hosted
+    ? (payload, signal) => requestHostedStatement(token, payload, signal)
+    : (payload, signal) => requestStatement(base, payload, signal, true)
+}
+
 async function readJson(url: string, signal?: AbortSignal): Promise<unknown> {
   const response = await fetch(url, { signal })
   if (!response.ok) throw new Error(`${response.status}: ${url}`)
