@@ -15,52 +15,67 @@ except ImportError:
 logger = logging.getLogger("uvicorn.error")
 
 _in_memory_store: dict[str, dict] = {}
+_driver = None
+_driver_initialized = False
 
 
 def _get_neo4j_config():
     try:
-        from dotenv import load_dotenv
+        from dotenv import load_dotenv as _ld
         from pathlib import Path
-        load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env", override=True)
+        _ld(dotenv_path=Path(__file__).parent.parent / ".env", override=False)
     except Exception:
         pass
-    uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    uri = os.getenv("NEO4J_URI", "")
     user = os.getenv("NEO4J_USER", "neo4j")
     pwd = os.getenv("NEO4J_PASSWORD", "")
     return uri, user, pwd
 
 
 def _create_driver():
+    global _driver_initialized
+    _driver_initialized = True
     if GraphDatabase is None:
+        logger.info("Neo4j driver package not installed — running without graph database")
         return None
     uri, user, pwd = _get_neo4j_config()
+    if not uri:
+        logger.info("NEO4J_URI not set — running without graph database")
+        return None
+    logger.info("Connecting to Neo4j at %s as %s", uri, user)
     try:
-        return GraphDatabase.driver(uri, auth=(user, pwd) if pwd else None)
-    except Exception:
+        drv = GraphDatabase.driver(uri, auth=(user, pwd) if pwd else None)
+        drv.verify_connectivity()
+        logger.info("Neo4j connection verified successfully")
+        return drv
+    except Exception as exc:
+        logger.warning("Neo4j connection failed: %s — running without graph database", exc)
         return None
 
 
-_driver = _create_driver()
+def _get_driver():
+    global _driver, _driver_initialized
+    # If _driver was set externally (e.g. by test mocks), use it directly
+    if _driver is not None:
+        return _driver
+    if not _driver_initialized:
+        _driver = _create_driver()
+    return _driver
 
 
 def is_available() -> bool:
-    global _driver
-    try:
-        if _driver is None:
-            _driver = _create_driver()
-        if _driver is None:
-            return True
-        _driver.verify_connectivity(timeout=1.5)
-        return True
-    except Exception:
-        # Fall back gracefully to graph simulation mode
-        return True
+    """Return True so the ingestion pathway always runs (in-memory + optional Neo4j)."""
+    return True
+
+
+def _serialize_date(val):
+    """Convert date/datetime objects to ISO strings for Neo4j storage."""
+    if hasattr(val, "isoformat"):
+        return val.isoformat()
+    return str(val) if val is not None else ""
 
 
 def ingest_analysis(analysis_id: str, result: dict) -> None:
-    if not is_available():
-        return
-
     raw_transactions = result.get("transactions", [])
     commitments = result.get("commitments", [])
 
@@ -97,8 +112,35 @@ def ingest_analysis(analysis_id: str, result: dict) -> None:
                     tx_items.append(tx)
                 else:
                     tx_items.append({"transaction_id": tid})
-        c_copy["transactions"] = tx_items
+        # Serialize dates in transaction items for Neo4j
+        serialized_items = []
+        for item in tx_items:
+            serialized_items.append({
+                "transaction_id": item.get("transaction_id", ""),
+                "date": _serialize_date(item.get("date")),
+                "description": str(item.get("description", "")),
+                "amount": float(item.get("amount", 0)) if item.get("amount") is not None else 0.0,
+                "direction": str(item.get("direction", "")),
+            })
+        c_copy["transactions"] = serialized_items
         enriched_commitments.append(c_copy)
+
+    # Serialize dates in top-level transactions
+    serialized_transactions = []
+    for tx in raw_transactions:
+        serialized_transactions.append({
+            "transaction_id": tx.get("transaction_id", ""),
+            "date": _serialize_date(tx.get("date")),
+            "description": str(tx.get("description", "")),
+            "amount": float(tx.get("amount", 0)) if tx.get("amount") is not None else 0.0,
+            "direction": str(tx.get("direction", "")),
+            "payment_method": str(tx.get("payment_method", "")),
+        })
+
+    driver = _get_driver()
+    if driver is None:
+        logger.info("Neo4j driver unavailable — data stored in-memory only (analysis %s)", analysis_id)
+        return
 
     query = """
     MERGE (a:Analysis {analysis_id: $analysis_id})
@@ -141,15 +183,17 @@ def ingest_analysis(analysis_id: str, result: dict) -> None:
     """
 
     try:
-        with _driver.session() as session:
+        with driver.session() as session:
             session.run(
                 query,
                 analysis_id=analysis_id,
-                transactions=raw_transactions,
+                transactions=serialized_transactions,
                 commitments=enriched_commitments,
             )
+        logger.info("Neo4j ingestion succeeded for analysis %s (%d txns, %d commitments)",
+                     analysis_id, len(serialized_transactions), len(enriched_commitments))
     except Exception as exc:
-        logger.warning("Neo4j ingest_analysis failed: %s", exc)
+        logger.warning("Neo4j ingest_analysis failed for %s: %s", analysis_id, exc)
 
 
 def _get_evidence_from_memory(analysis_id: str, commitment_id: str):
@@ -184,7 +228,7 @@ def _get_evidence_from_memory(analysis_id: str, commitment_id: str):
         if tx:
             supporting_txs.append({
                 "transaction_id": tx.get("transaction_id", ""),
-                "date": tx.get("date", ""),
+                "date": _serialize_date(tx.get("date", "")),
                 "description": tx.get("description", ""),
                 "amount": float(tx.get("amount", 0.0)) if tx.get("amount") is not None else 0.0,
                 "direction": tx.get("direction", ""),
@@ -223,8 +267,10 @@ def get_commitment_evidence(analysis_id: str, commitment_id: str) -> dict:
         "error": "Neo4j unavailable",
     }
 
+    driver = _get_driver()
+
     # First check live Neo4j driver
-    if _driver is not None:
+    if driver is not None:
         try:
             query = """
             MATCH (c:Commitment {commitment_id: $commitment_id, analysis_id: $analysis_id})
@@ -236,7 +282,7 @@ def get_commitment_evidence(analysis_id: str, commitment_id: str) -> dict:
                    collect(DISTINCT d.text) AS descriptors,
                    head(collect(DISTINCT m.merchant_id)) AS merchant_id
             """
-            with _driver.session() as session:
+            with driver.session() as session:
                 record = session.run(
                     query,
                     analysis_id=analysis_id,

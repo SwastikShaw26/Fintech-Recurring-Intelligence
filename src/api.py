@@ -891,14 +891,19 @@ async def read_statement_request(request):
             csv_text = file_content.decode("utf-8")
         except UnicodeDecodeError:
             raise HTTPException(status_code=400, detail="Choose a UTF-8 CSV statement.")
+        csv_text = csv_text.replace('\r\n', '\n').replace('\r', '\n')
+        csv_text = csv_text.replace('\x00', '')
         if not csv_text.strip():
             raise HTTPException(status_code=400, detail="The statement has no transactions.")
         return {"csv": csv_text}
 
     try:
-        return json.loads(body)
+        statement = json.loads(body)
     except (ValueError, RecursionError):
         raise HTTPException(status_code=422, detail="Invalid statement request.") from None
+    if isinstance(statement.get("csv"), str):
+        statement["csv"] = statement["csv"].replace('\r\n', '\n').replace('\r', '\n').replace('\x00', '')
+    return statement
 
 
 def local_account_overview(path, accounts):
