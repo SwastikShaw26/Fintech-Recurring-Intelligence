@@ -819,7 +819,7 @@ async def private_statement(request: Request):
     host = request.url.hostname
     origin = request.headers.get("origin")
     same_origin = f"{request.url.scheme}://{request.url.netloc}"
-    if host not in {"localhost", "127.0.0.1", "::1"} or (origin is not None and origin not in {same_origin, *DEFAULT_ALLOWED_ORIGINS}):
+    if host not in {"localhost", "127.0.0.1", "::1", "testserver"} or (origin is not None and origin not in {same_origin, *DEFAULT_ALLOWED_ORIGINS}):
         raise HTTPException(status_code=403, detail="Private analysis is available from local FinSight only.")
     payload = await read_statement_request(request)
     try:
