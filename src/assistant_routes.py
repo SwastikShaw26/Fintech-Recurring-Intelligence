@@ -16,10 +16,12 @@ class ExplanationRequest(BaseModel):
     language: Literal["en", "hi"] = "en"
     consent: bool = False
     evidence_type: Literal[
-        "forecast", "review"
-    ]
-    count: int = Field(ge=0, le=10000)
+        "forecast", "review", "custom"
+    ] = "forecast"
+    count: int = Field(default=0, ge=0, le=10000)
     days: int | None = Field(default=None, ge=1, le=365)
+    question: str | None = Field(default=None, max_length=250)
+    context_summary: str | None = Field(default=None, max_length=800)
 
 
 class ExplanationResponse(BaseModel):
@@ -51,7 +53,9 @@ async def explain_financial_evidence(
             "These are projections based on observed patterns, "
             "not confirmed future charges."
         )
-    else:
+        if request.question:
+            summary = f"User Question: {request.question.strip()}\nFinancial Evidence: {summary}"
+    elif request.evidence_type == "review":
         if request.days is not None:
             raise HTTPException(
                 status_code=422,
@@ -62,6 +66,15 @@ async def explain_financial_evidence(
             f"FinSight identified {request.count} review "
             "signals in the loaded records. These are "
             "potential issues that require verification."
+        )
+        if request.question:
+            summary = f"User Question: {request.question.strip()}\nFinancial Evidence: {summary}"
+    else:
+        context = request.context_summary or f"User has {request.count} detected recurring commitments and patterns."
+        summary = (
+            f"User Question: {request.question or 'Summarize financial commitments'}\n"
+            f"Financial Context: {context}\n"
+            "Please answer the user's question clearly, helpfully, and accurately."
         )
 
     try:
