@@ -792,7 +792,22 @@ def analyze_statement(payload):
                         {
                             "commitment_id": c["commitment_id"],
                             "merchant_id": c.get("merchant_id"),
+                            "merchant_display_name": c.get("merchant_display_name")
+                                or c.get("merchant", {}).get("display_name")
+                                or c.get("description", "Unknown Merchant"),
+                            "merchant_resolution_method": c.get("merchant_resolution_method", "descriptor"),
                             "transaction_ids": c.get("transaction_ids", []),
+                            "transactions": [
+                                {
+                                    "transaction_id": tx["transaction_id"],
+                                    "date": tx.get("date", ""),
+                                    "description": tx.get("description", ""),
+                                    "amount": tx.get("amount", 0),
+                                    "direction": tx.get("direction", "debit"),
+                                }
+                                for tx in transactions
+                                if tx.get("transaction_id") in c.get("transaction_ids", [])
+                            ],
                             "cadence": c.get("cadence", "unknown"),
                             "status": c.get("status", "candidate"),
                             "confidence_score": c.get("confidence_score"),
