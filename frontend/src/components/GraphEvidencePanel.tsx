@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
+import { useAuth } from '../context/AuthContext'
 import { fetchGraphEvidence, type GraphEvidence } from '../services/graphEvidence'
 
 type GraphState =
@@ -13,6 +14,7 @@ export function GraphEvidencePanel({ api, analysisId, commitmentId, hosted, form
   hosted: boolean
   formatAmount: (amount: number) => string
 }) {
+  const { token } = useAuth()
   const [state, setState] = useState<GraphState | null>(null)
   const request = useRef<AbortController | null>(null)
   useLayoutEffect(() => () => request.current?.abort(), [])
@@ -24,7 +26,7 @@ export function GraphEvidencePanel({ api, analysisId, commitmentId, hosted, form
     request.current = controller
     setState({ status: 'loading' })
     try {
-      const evidence = await fetchGraphEvidence(api, analysisId, commitmentId, controller.signal)
+      const evidence = await fetchGraphEvidence(api, analysisId, commitmentId, controller.signal, analysisId === 'demo' ? null : token)
       if (!controller.signal.aborted) setState({ status: 'ready', evidence })
     } catch (error) {
       if (!controller.signal.aborted) {
@@ -45,8 +47,11 @@ export function GraphEvidencePanel({ api, analysisId, commitmentId, hosted, form
       {state?.status === 'error' && <p role="alert">{state.message}</p>}
       {evidence && (
         <div aria-live="polite">
+          <p>Evidence source: {evidence.source === 'neo4j' ? 'Neo4j'
+            : analysisId === 'demo' ? 'Synthetic demo records'
+              : evidence.source === 'memory' ? 'Current analysis cache' : 'Relationship evidence API'}</p>
           <p>{evidence.merchant.resolution_method === 'graph'
-            ? <>Merchant linked in Neo4j: <strong>{evidence.merchant.display_name}</strong></>
+            ? <>Linked merchant: <strong>{evidence.merchant.display_name}</strong></>
             : 'Merchant link unresolved.'}</p>
           <h4>Statement descriptors</h4>
           {evidence.descriptors.length ? <ul>{evidence.descriptors.map(descriptor => <li key={descriptor}>{descriptor}</li>)}</ul>
@@ -56,8 +61,8 @@ export function GraphEvidencePanel({ api, analysisId, commitmentId, hosted, form
             <ul>{evidence.supporting_transactions.map(row => (
               <li key={row.transaction_id}>{row.date} · {row.description} · {formatAmount(Math.abs(row.amount))}{row.direction ? ` · ${row.direction}` : ''}</li>
             ))}</ul>
-          ) : <p>No supporting transactions recorded in the graph.</p>}
-          <p>Neo4j links these records to the selected pattern. See Detection evidence above for the detector’s reasons.</p>
+          ) : <p>No supporting transactions found for this commitment.</p>}
+          <p>Compare these transactions and statement descriptors to see which charges support the selected recurring pattern.</p>
         </div>
       )}
     </section>

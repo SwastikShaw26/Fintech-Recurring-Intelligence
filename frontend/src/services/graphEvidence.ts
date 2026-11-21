@@ -15,6 +15,7 @@ type GraphMerchant = {
 export type GraphEvidence = {
   commitment_id: string
   graph_available: true
+  source?: 'neo4j' | 'memory' | 'demo'
   merchant: GraphMerchant
   supporting_transactions: SupportingTransaction[]
   descriptors: string[]
@@ -28,10 +29,11 @@ function isTransaction(value: unknown): value is SupportingTransaction {
     && typeof row.amount === 'number' && Number.isFinite(row.amount)
 }
 
-export async function fetchGraphEvidence(api: string, analysisId: string, commitmentId: string, signal: AbortSignal): Promise<GraphEvidence> {
+export async function fetchGraphEvidence(api: string, analysisId: string, commitmentId: string, signal: AbortSignal, token?: string | null): Promise<GraphEvidence> {
   const query = new URLSearchParams({ analysis_id: analysisId })
   const response = await fetch(`${api}/api/graph/commitment/${encodeURIComponent(commitmentId)}/evidence?${query}`, {
     signal, redirect: 'error',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
   if (response.status === 404 || response.status === 503) {
     throw new Error('Graph evidence is unavailable for this commitment. The local detection evidence is still available.')
@@ -40,6 +42,7 @@ export async function fetchGraphEvidence(api: string, analysisId: string, commit
   const result = await response.json() as Partial<GraphEvidence> | null
   const merchant = result?.merchant
   if (!result || result.commitment_id !== commitmentId || result.graph_available !== true
+    || (result.source !== undefined && !['neo4j', 'memory', 'demo'].includes(result.source))
     || !merchant || typeof merchant.display_name !== 'string'
     || !(merchant.resolution_method === 'graph' && typeof merchant.merchant_id === 'string' && merchant.merchant_id
       || merchant.resolution_method === 'unresolved' && merchant.merchant_id === null)

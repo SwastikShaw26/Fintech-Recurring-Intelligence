@@ -35,6 +35,7 @@ import { ForecastCard } from './components/ForecastCard'
 import { CommitmentBreakdown } from './components/CommitmentBreakdown'
 import { observedStatementWindow } from './components/forecastReliability'
 import { GraphEvidencePanel } from './components/GraphEvidencePanel'
+import { GraphExpenseReview } from './components/GraphExpenseReview'
 import { BusinessExpensePlanner } from './components/BusinessExpensePlanner'
 import { TransactionReview } from './components/TransactionReview'
 import { LedgerAssistant } from './components/LedgerAssistant'
@@ -879,8 +880,12 @@ export default function App() {
               </div>
             )}
 
-            {selectedId && <GraphEvidencePanel key={JSON.stringify([statement?.analysis_id, selectedId])}
-              api={API} analysisId={statement?.analysis_id} commitmentId={selectedId} hosted={HOSTED} formatAmount={money} />}
+            {selectedId && <GraphEvidencePanel key={JSON.stringify([workspaceKey, selectedId])}
+              api={API} analysisId={privateMode ? statement?.analysis_id : 'demo'} commitmentId={selectedId}
+              hosted={HOSTED && privateMode} formatAmount={money} />}
+            {selectedId && !HOSTED && statement?.analysis_id && <GraphExpenseReview
+              key={JSON.stringify(['expense-review', workspaceKey, selectedId])}
+              api={API} analysisId={statement.analysis_id} commitmentId={selectedId} />}
 
             {redesigned && <ObservedEvidence rows={evidenceRows} currency={ledgerCurrency(selected.currency, summary.currency)}
               loading={needsDemoEvidence && !activeEvidence} error={activeEvidence?.error ?? false} />}

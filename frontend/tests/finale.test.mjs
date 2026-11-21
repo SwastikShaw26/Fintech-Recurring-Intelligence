@@ -13,9 +13,10 @@ test('graph lookup encodes scope and preserves the API merchant distinction', as
   t.mock.method(globalThis, 'fetch', async (url, options) => {
     assert.equal(url, '/api/graph/commitment/c%2F1/evidence?analysis_id=a%26b')
     assert.equal(options.redirect, 'error')
+    assert.equal(options.headers.Authorization, 'Bearer test-token')
     return Response.json(payload)
   })
-  assert.deepEqual(await fetchGraphEvidence('', 'a&b', 'c/1', new AbortController().signal), payload)
+  assert.deepEqual(await fetchGraphEvidence('', 'a&b', 'c/1', new AbortController().signal, 'test-token'), payload)
 })
 
 test('graph HTTP errors and mismatched results cannot appear as evidence', async t => {

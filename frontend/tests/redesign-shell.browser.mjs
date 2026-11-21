@@ -17,6 +17,7 @@ try {
   const modes = page.getByRole('group', { name: 'Workspace layout' })
   const redesigned = modes.getByRole('button', { name: 'Redesigned' })
   const classic = modes.getByRole('button', { name: 'Classic' })
+  await redesigned.click()
   await page.getByText('Synthetic transaction data', { exact: true }).waitFor()
   await page.getByText('Observed recurring debits', { exact: true }).waitFor()
   await page.getByRole('region', { name: 'Subscription timeline' }).locator('.milestone-event').first().waitFor()
@@ -69,6 +70,15 @@ try {
   const dialog = page.getByRole('dialog')
   await dialog.getByText('Detection evidence', { exact: true }).waitFor()
   assert.equal(await dialog.getByRole('region', { name: 'Observed supporting debits' }).getByRole('listitem').count(), 3)
+  const relationships = dialog.getByRole('region', { name: 'Relationship evidence' })
+  await relationships.getByRole('button', { name: 'Load graph evidence' }).click()
+  await relationships.getByText(/^Evidence source: (Neo4j|Current analysis cache|Relationship evidence API)$/).waitFor()
+  await relationships.getByText('Supporting transactions', { exact: true }).waitFor()
+  const expenseReview = dialog.getByRole('region', { name: 'Expense review' })
+  for (const [category, totals] of [['Business', '1 business · 0 personal'], ['Personal', '0 business · 1 personal']]) {
+    await expenseReview.getByRole('button', { name: category, exact: true }).click()
+    await expenseReview.getByText(`This charge: ${category.toLowerCase()}. Statement totals: ${totals}.`).waitFor()
+  }
   await page.keyboard.press('Escape')
   await dialog.waitFor({ state: 'hidden' })
   assert.equal(await commitment.evaluate(element => element === document.activeElement), true)
