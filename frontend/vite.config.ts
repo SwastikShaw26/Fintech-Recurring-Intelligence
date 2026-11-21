@@ -1,4 +1,3 @@
-
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { publicMetadata } from './src/publicMetadata.ts'
@@ -28,6 +27,19 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
+      },
+    },
+  },
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('react-dom') || id.includes('react/')) return 'vendor-react'
+          if (id.includes('three') || id.includes('@react-three')) return 'vendor-three'
+          if (id.includes('gsap')) return 'vendor-animation'
+          if (id.includes('lucide-react')) return 'vendor-icons'
+        },
       },
     },
   },
