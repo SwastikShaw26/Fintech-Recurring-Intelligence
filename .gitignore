@@ -44,3 +44,7 @@ dist/
 # Exception: keep frontend/dist (FastAPI static files)
 !frontend/dist/
 !frontend/dist/**
+
+data/.auth_secret
+data/users.db
+

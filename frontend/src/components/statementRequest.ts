@@ -2,10 +2,15 @@ import type { StatementData } from './StatementImport'
 
 export async function requestStatement<T>(api: string, payload: object, signal: AbortSignal, saved = false): Promise<T> {
   const endpoint = new URL(api + (saved ? '/api/local-statement' : '/api/private-statement'), window.location.href)
+  const token = localStorage.getItem('finsight_token')
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
 
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
     signal,
     cache: 'no-store',

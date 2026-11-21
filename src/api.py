@@ -32,6 +32,8 @@ from src.private_statement import (
 )
 from .graph_routes import router as graph_router
 from src.assistant_routes import router as assistant_router
+from src.auth_routes import router as auth_router
+from src.auth import verify_token
 
 ROOT = Path(__file__).resolve().parents[1]
 TRANSACTIONS_FILE = ROOT / "data" / "raw" / "synthetic_transactions.csv"
@@ -76,6 +78,7 @@ app = FastAPI(
 )
 app.include_router(graph_router, prefix="/api")
 app.include_router(assistant_router)
+app.include_router(auth_router)
 
 @app.get("/api/summary/business")
 def business_summary_direct(analysis_id: Optional[str] = Query(None)):
@@ -712,7 +715,7 @@ def build_alerts(transactions, commitments, currency="INR"):
     return {"total": len(alerts), "items": alerts}
 
 
-def analyze_statement(payload):
+def analyze_statement(payload, user_id="guest"):
     if not isinstance(payload, dict):
         raise ValueError("Choose a UTF-8 CSV statement.")
     columns, rows = parse_statement(payload.get("csv"))
@@ -816,7 +819,7 @@ def analyze_statement(payload):
                         }
                         for c in commitments
                     ],
-                }),
+                }, user_id),
                 daemon=True,
             ).start()
     except Exception:
@@ -845,9 +848,19 @@ async def private_statement(request: Request):
     same_origin = f"{request.url.scheme}://{request.url.netloc}"
     if origin is not None and origin not in {same_origin, *DEFAULT_ALLOWED_ORIGINS}:
         raise HTTPException(status_code=403, detail="Private analysis is available from local FinSight only.")
+    
+    # Extract authenticated user if token present
+    user_id = "guest"
+    auth_header = request.headers.get("authorization")
+    if auth_header:
+        token = auth_header.replace("Bearer ", "").strip()
+        user_info = verify_token(token)
+        if user_info:
+            user_id = user_info.get("uid", "guest")
+
     payload = await read_statement_request(request)
     try:
-        return await run_in_threadpool(analyze_statement, payload)
+        return await run_in_threadpool(analyze_statement, payload, user_id)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
 

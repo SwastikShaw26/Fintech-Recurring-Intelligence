@@ -1,7 +1,8 @@
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
 
+from .auth import verify_token
 from .neo4j_service import get_commitment_evidence, is_available
 
 router = APIRouter(prefix="/graph", tags=["graph"])
@@ -17,6 +18,7 @@ class ClassifyRequest(BaseModel):
 async def get_evidence(
     commitment_id: str,
     analysis_id: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None),
 ):
     if not analysis_id or not analysis_id.strip():
         raise HTTPException(
@@ -24,7 +26,14 @@ async def get_evidence(
             detail={"error": "analysis_id query parameter is required"},
         )
 
-    result = get_commitment_evidence(analysis_id, commitment_id)
+    user_id = None
+    if authorization:
+        token = authorization.replace("Bearer ", "").strip()
+        payload = verify_token(token)
+        if payload:
+            user_id = payload.get("uid")
+
+    result = get_commitment_evidence(analysis_id, commitment_id, user_id=user_id)
     if not result.get("graph_available"):
         raise HTTPException(
             status_code=503,

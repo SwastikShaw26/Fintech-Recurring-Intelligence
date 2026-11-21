@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Optional
 
 try:
     from dotenv import load_dotenv
@@ -76,7 +77,7 @@ def _serialize_date(val):
     return str(val) if val is not None else ""
 
 
-def ingest_analysis(analysis_id: str, result: dict) -> None:
+def ingest_analysis(analysis_id: str, result: dict, user_id: str = "guest") -> None:
     raw_transactions = result.get("transactions", [])
     commitments = result.get("commitments", [])
 
@@ -91,6 +92,7 @@ def ingest_analysis(analysis_id: str, result: dict) -> None:
         "transactions": raw_transactions,
         "commitments": commitments,
         "tx_lookup": tx_lookup,
+        "user_id": user_id,
     }
 
     # Format commitments with enriched merchant display name and transaction items
@@ -144,7 +146,10 @@ def ingest_analysis(analysis_id: str, result: dict) -> None:
         return
 
     query = """
+    MERGE (u:User {user_id: $user_id})
     MERGE (a:Analysis {analysis_id: $analysis_id})
+    SET a.user_id = $user_id
+    MERGE (u)-[:OWNS_ANALYSIS]->(a)
     WITH a
     UNWIND $transactions AS tx
     MERGE (t:Transaction {transaction_id: tx.transaction_id, analysis_id: $analysis_id})
@@ -152,33 +157,40 @@ def ingest_analysis(analysis_id: str, result: dict) -> None:
         t.description = tx.description,
         t.amount = tx.amount,
         t.direction = tx.direction,
-        t.payment_method = tx.payment_method
+        t.payment_method = tx.payment_method,
+        t.user_id = $user_id
     MERGE (a)-[:HAS_TRANSACTION]->(t)
     MERGE (d:Descriptor {text: tx.description, analysis_id: $analysis_id})
+    SET d.user_id = $user_id
     MERGE (t)-[:HAS_DESCRIPTOR]->(d)
     WITH a
     UNWIND $commitments AS c
     MERGE (cm:Commitment {commitment_id: c.commitment_id, analysis_id: $analysis_id})
     SET cm.cadence = c.cadence,
         cm.status = c.status,
-        cm.confidence_score = c.confidence_score
+        cm.confidence_score = c.confidence_score,
+        cm.user_id = $user_id
     MERGE (a)-[:HAS_COMMITMENT]->(cm)
     FOREACH (_ IN CASE WHEN c.merchant_id IS NOT NULL THEN [1] ELSE [] END |
         MERGE (m:Merchant {merchant_id: c.merchant_id, analysis_id: $analysis_id})
-        SET m.display_name = c.merchant_display_name
+        SET m.display_name = c.merchant_display_name,
+            m.user_id = $user_id
         MERGE (cm)-[:BELONGS_TO_MERCHANT]->(m)
         FOREACH (tx_item IN c.transactions |
             MERGE (tx_node:Transaction {transaction_id: tx_item.transaction_id, analysis_id: $analysis_id})
             SET tx_node.description = tx_item.description,
                 tx_node.date = tx_item.date,
-                tx_node.amount = tx_item.amount
+                tx_node.amount = tx_item.amount,
+                tx_node.user_id = $user_id
             MERGE (d_item:Descriptor {text: tx_item.description, analysis_id: $analysis_id})
+            SET d_item.user_id = $user_id
             MERGE (d_item)-[:NORMALIZES_TO]->(m)
             MERGE (tx_node)-[:PAID_TO]->(m)
         )
     )
     FOREACH (tx_item IN c.transactions |
         MERGE (tx_supp:Transaction {transaction_id: tx_item.transaction_id, analysis_id: $analysis_id})
+        SET tx_supp.user_id = $user_id
         MERGE (tx_supp)-[:SUPPORTS]->(cm)
     )
     """
@@ -190,9 +202,10 @@ def ingest_analysis(analysis_id: str, result: dict) -> None:
                 analysis_id=analysis_id,
                 transactions=serialized_transactions,
                 commitments=enriched_commitments,
+                user_id=user_id,
             )
-        logger.info("Neo4j ingestion succeeded for analysis %s (%d txns, %d commitments)",
-                     analysis_id, len(serialized_transactions), len(enriched_commitments))
+        logger.info("Neo4j ingestion succeeded for user %s, analysis %s (%d txns, %d commitments)",
+                     user_id, analysis_id, len(serialized_transactions), len(enriched_commitments))
     except Exception as exc:
         logger.warning("Neo4j ingest_analysis failed for %s: %s", analysis_id, exc)
 
@@ -261,7 +274,7 @@ def _get_evidence_from_memory(analysis_id: str, commitment_id: str):
     }
 
 
-def get_commitment_evidence(analysis_id: str, commitment_id: str) -> dict:
+def get_commitment_evidence(analysis_id: str, commitment_id: str, user_id: Optional[str] = None) -> dict:
     fallback_response = {
         "commitment_id": commitment_id,
         "graph_available": False,
@@ -273,22 +286,34 @@ def get_commitment_evidence(analysis_id: str, commitment_id: str) -> dict:
     # First check live Neo4j driver
     if driver is not None:
         try:
-            query = """
-            MATCH (c:Commitment {commitment_id: $commitment_id, analysis_id: $analysis_id})
-            OPTIONAL MATCH (t:Transaction {analysis_id: $analysis_id})-[:SUPPORTS]->(c)
-            OPTIONAL MATCH (t)-[:HAS_DESCRIPTOR]->(d:Descriptor {analysis_id: $analysis_id})
-            OPTIONAL MATCH (t)-[:PAID_TO]->(m:Merchant {analysis_id: $analysis_id})
-            RETURN c,
-                   collect(DISTINCT t) AS transactions,
-                   collect(DISTINCT d.text) AS descriptors,
-                   head(collect(DISTINCT m.merchant_id)) AS merchant_id
-            """
+            # Query scoped to user_id if provided
+            if user_id:
+                query = """
+                MATCH (c:Commitment {commitment_id: $commitment_id, analysis_id: $analysis_id, user_id: $user_id})
+                OPTIONAL MATCH (t:Transaction {analysis_id: $analysis_id, user_id: $user_id})-[:SUPPORTS]->(c)
+                OPTIONAL MATCH (t)-[:HAS_DESCRIPTOR]->(d:Descriptor {analysis_id: $analysis_id})
+                OPTIONAL MATCH (t)-[:PAID_TO]->(m:Merchant {analysis_id: $analysis_id})
+                RETURN c,
+                       collect(DISTINCT t) AS transactions,
+                       collect(DISTINCT d.text) AS descriptors,
+                       head(collect(DISTINCT m.merchant_id)) AS merchant_id
+                """
+                params = {"analysis_id": analysis_id, "commitment_id": commitment_id, "user_id": user_id}
+            else:
+                query = """
+                MATCH (c:Commitment {commitment_id: $commitment_id, analysis_id: $analysis_id})
+                OPTIONAL MATCH (t:Transaction {analysis_id: $analysis_id})-[:SUPPORTS]->(c)
+                OPTIONAL MATCH (t)-[:HAS_DESCRIPTOR]->(d:Descriptor {analysis_id: $analysis_id})
+                OPTIONAL MATCH (t)-[:PAID_TO]->(m:Merchant {analysis_id: $analysis_id})
+                RETURN c,
+                       collect(DISTINCT t) AS transactions,
+                       collect(DISTINCT d.text) AS descriptors,
+                       head(collect(DISTINCT m.merchant_id)) AS merchant_id
+                """
+                params = {"analysis_id": analysis_id, "commitment_id": commitment_id}
+
             with driver.session() as session:
-                record = session.run(
-                    query,
-                    analysis_id=analysis_id,
-                    commitment_id=commitment_id,
-                ).single()
+                record = session.run(query, **params).single()
 
             if record and record["c"] is not None:
                 merchant_id = record["merchant_id"]
