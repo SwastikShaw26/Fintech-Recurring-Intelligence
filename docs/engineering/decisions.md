@@ -25,3 +25,7 @@ Exchange the operator credential for a random short-lived bearer and store only 
 ## Approved product expansion
 
 The user approved the five numbered product expansions from the latest re-audit. The implementation uses separate workstreams for import quality, hosted account history and calendar export. Cash scenarios and commitment activity integrate with the existing Forecast and commitment detail views. All five retain the synthetic and local workflows. Cash scenarios stay in browser memory, exports are user-initiated, and mandate reports remain distinct from issuer confirmation.
+
+## Sarvam explanations for Ask FinSight
+
+The user approved an optional English or Hindi explanation of local ledger evidence. The browser submits the evidence type, count, and forecast window when applicable. The local FastAPI wrapper requires consent and constructs the provider prompt from those fields. The existing ledger answer remains available independently of the provider.

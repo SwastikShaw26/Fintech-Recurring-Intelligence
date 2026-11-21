@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { buildCommitmentForecast } from './milestones'
+import { buildCommitmentForecast, shortHistoryObservations } from './milestones'
 import { ReminderPanel } from './ReminderPanel'
 import { CashBufferPlanner } from './CashBufferPlanner'
+import { observedStatementWindow, staleHistoryDays } from './forecastReliability'
 import './ForecastPanel.css'
 
 type RecordData = Record<string, unknown>
@@ -20,6 +21,9 @@ export function ForecastPanel({ commitments, transactions, nameFor, formatAmount
   const [selected, setSelected] = useState<string[]>([])
   const today = indiaDate.format(new Date())
   const forecast = buildCommitmentForecast(commitments, today)
+  const observed = observedStatementWindow(transactions, today)
+  const shortHistoryCount = commitments.filter(item => typeof item.transaction_count === 'number'
+    && item.transaction_count < shortHistoryObservations).length
   const horizonTotal = forecast.entries.reduce((total, entry) => total + (entry.amount ?? 0), 0)
   const savings = forecast.annualized.reduce((total, entry) =>
     selected.includes(String(entry.commitment.commitment_id)) && !reportedFor(entry.commitment)
@@ -40,7 +44,18 @@ export function ForecastPanel({ commitments, transactions, nameFor, formatAmount
   return (
     <section className="panel forecast-panel" aria-labelledby="forecast-heading">
       <h2 id="forecast-heading">Estimated obligations</h2>
-      <p>Projections assume observed patterns continue. Amounts and posting dates can change. A user report does not establish that the issuer has stopped future charges.</p>
+      <p>Upcoming charges are estimates based on past activity. Amounts and posting dates can change. Check your provider for confirmation.</p>
+      <div className="evidence-list">
+        <h3>Forecast reliability</h3>
+        {observed ? (
+          <p>Loaded transaction dates span <time dateTime={observed.first}>{dateLabel.format(new Date(observed.first))}</time>
+            {' to '}<time dateTime={observed.last}>{dateLabel.format(new Date(observed.last))}</time>.
+            {' '}The latest loaded transaction was {observed.ageDays} days ago.</p>
+        ) : <p>No dated transactions are available to assess freshness.</p>}
+        {observed?.stale && <p><strong>Stale history.</strong> The latest loaded transaction is more than {staleHistoryDays} days old. Import newer records before relying on estimates.</p>}
+        {shortHistoryCount > 0 && <p><strong>Limited observations.</strong> {shortHistoryCount} recurring patterns have fewer than {shortHistoryObservations} supporting transactions.</p>}
+        <p><strong>Coverage unverified.</strong> The observed date range may omit days, accounts, or transactions.</p>
+      </div>
       <dl className="forecast-summary">
         <div><dt>Known estimates in 30 days</dt><dd>{formatAmount(horizonTotal)}</dd></div>
         <div><dt>Monthly equivalent</dt><dd>{formatAmount(forecast.annual / 12)}</dd></div>
@@ -57,6 +72,8 @@ export function ForecastPanel({ commitments, transactions, nameFor, formatAmount
                 <button type="button" className="text-button" onClick={() => onSelect(commitment)}>{nameFor(commitment)}</button>
                 <span>{commitment.billing_anchor_date ? 'Fitted calendar date' : 'Based on last observed debit'}</span>
                 {commitment.cadence === 'annual' && <span>Estimated annual renewal</span>}
+                {typeof commitment.transaction_count === 'number' && Number.isFinite(commitment.transaction_count)
+                  && <span>Supporting observations: {commitment.transaction_count}</span>}
                 {!!uncertainty.length && <span>{uncertainty.join(' · ')}</span>}
                 {reportedFor(commitment) && <span>Marked as revoked (user-reported)</span>}
               </div>
