@@ -290,3 +290,17 @@ Independent review caught a stale list entry after deleting through a Unicode-eq
 - Both local launchers use the Sarvam wrapper. The wrapper runs the existing FastAPI lifespan on the mounted app. The default provider model is `sarvam-105b-conversations`.
 - The frontend production build and targeted ESLint passed, along with 26 frontend tests. The Python suite reported `73 passed, 1 skipped, 1 warning`. The Vite proxy returned HTTP 200 for health, 403 for missing consent, and 503 when the provider key was absent.
 - Headless Chrome with stubbed responses verified consent gating, loading, stale-response suppression, Hindi display, the minimal request payload, and the provider-error fallback. The backend test verified the outgoing aggregate prompt. Live generation requires a server-side `SARVAM_API_KEY`.
+
+## Frontend redesign step 1
+
+- Added a shared app shell with a keyboard-operable Redesigned / Classic toggle. Both modes use the same page content and application state.
+- TypeScript, ESLint, and the production build passed. Frontend tests reported 31 passed. Python reported 84 passed and one hosted storage module skipped because Alembic was unavailable.
+- The Chrome regression first failed on the previous build because the layout control was absent. It passed with the new shell, covering the demo timeline and synthetic CSV mapping, analysis, commitment evidence, alert evidence, and forecast across layout switches. It also checked keyboard activation, dialog focus return, and 320 px viewport overflow.
+
+## Frontend redesign steps 2–7
+
+- The redesigned ledger groups commitments by currency and cadence, displays linked observed debits in the evidence drawer, and distinguishes inferred dates and amounts from observed rows.
+- Alert acknowledgement uses session storage scoped to the active analysis and contains alert IDs only. Sarvam uses the existing aggregate-only endpoint with explicit consent. Original evidence remains visible during requests and after errors.
+- The workspace switcher uses existing saved-statement paths. A synthetic SQLite comparison verified INR and USD burdens and inferred dates separately. Hosted comparisons use the existing shared-period observed-debit response and label forecast dates unavailable.
+- The forecast card has a table equivalent. The cost summary uses known annual estimates per currency, cadence or merchant grouping, and a formula-escaped client-side CSV. The import flow surfaces mapping progress and duplicate columns before submission.
+- Each step is validated from a staging snapshot using TypeScript, ESLint, a production build outside tracked frontend output, frontend unit tests, and the synthetic Chrome acceptance journey. Step 6's first browser run exposed a shared widget key. Distinct keys resolved duplicate chart rendering after navigation.
