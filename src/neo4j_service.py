@@ -27,7 +27,8 @@ def _get_neo4j_config():
     except Exception:
         pass
     uri = os.getenv("NEO4J_URI", "")
-    user = os.getenv("NEO4J_USER", "neo4j")
+    # Check both NEO4J_USERNAME and NEO4J_USER
+    user = os.getenv("NEO4J_USERNAME") or os.getenv("NEO4J_USER", "neo4j")
     pwd = os.getenv("NEO4J_PASSWORD", "")
     return uri, user, pwd
 
@@ -43,8 +44,10 @@ def _create_driver():
         logger.info("NEO4J_URI not set — running without graph database")
         return None
     logger.info("Connecting to Neo4j at %s as %s", uri, user)
+    # If on Windows connecting to Aura, neo4j+ssc ensures TLS verification without Windows trust store failures
+    connect_uri = uri.replace("neo4j+s://", "neo4j+ssc://") if uri.startswith("neo4j+s://") else uri
     try:
-        drv = GraphDatabase.driver(uri, auth=(user, pwd) if pwd else None)
+        drv = GraphDatabase.driver(connect_uri, auth=(user, pwd) if pwd else None)
         drv.verify_connectivity()
         logger.info("Neo4j connection verified successfully")
         return drv
@@ -55,11 +58,9 @@ def _create_driver():
 
 def _get_driver():
     global _driver, _driver_initialized
-    # If _driver was set externally (e.g. by test mocks), use it directly
     if _driver is not None:
         return _driver
-    if not _driver_initialized:
-        _driver = _create_driver()
+    _driver = _create_driver()
     return _driver
 
 
