@@ -17,6 +17,10 @@ import { AppShell, type Layout } from './components/AppShell'
 import { CommitmentList, LedgerKpis, ObservedEvidence } from './components/LedgerDashboard'
 import { commitmentCards, ledgerCurrency, ledgerKpis, linkedDebits } from './components/ledgerViewModel'
 import { readDemoEvidence, readDemoWorkspace } from './services/workspaceRead'
+import { AlertCards } from './components/AlertCards'
+import { buildAlertCards } from './components/alertCardsModel'
+import { SarvamEvidenceContext } from './components/SarvamEvidenceContext'
+import { explainWithSarvam } from './services/sarvamClient'
 import { RevocationTracker } from './components/RevocationTracker'
 import { SubscriptionTimeline } from './components/SubscriptionTimeline'
 import { emptyRevocationState, getStoredRevocationState, type RevocationState } from './components/revocationStorage'
@@ -238,9 +242,9 @@ export default function App() {
       if (event.key !== 'Tab') return
       const focusable = Array.from(
         document.querySelectorAll<HTMLElement>(
-          '.detail-modal button:not(:disabled), .detail-modal a[href], .detail-modal input:not(:disabled), .detail-modal [tabindex]:not([tabindex="-1"])',
+          '.detail-modal button:not(:disabled), .detail-modal a[href], .detail-modal input:not(:disabled), .detail-modal select:not(:disabled), .detail-modal summary, .detail-modal [tabindex]:not([tabindex="-1"])',
         ),
-      )
+      ).filter(element => element.getClientRects().length > 0)
       if (focusable.length === 0) return
 
       const first = focusable[0]
@@ -374,6 +378,19 @@ export default function App() {
   const ledgerState = { loading: !privateMode && loading, error: !privateMode && Boolean(error) }
   const cardsFor = (rows: AnyRecord[]) => commitmentCards(rows, transactions, summary.currency, asOf, commitmentName, confidence,
     item => commitmentRevocation(item, revocations, privateMode).reported)
+  const workspaceKey = JSON.stringify([privateMode ? (HOSTED ? 'hosted' : 'local') : 'demo', statement?.analysis_id ?? null])
+  const alertModels = redesigned ? buildAlertCards(alerts, transactions, commitments) : []
+  const alertProps = {
+    alerts: alertModels, workspaceKey, loading: ledgerState.loading, error: ledgerState.error ? error : undefined,
+    formatAmount: money, requestExplanation: explainWithSarvam, onRetry: () => void loadData(),
+    onSelectCommitment: (id: string) => {
+      const commitment = commitments.find(row => row.commitment_id === id)
+      if (commitment) setSelected(commitment)
+    },
+  }
+  const evidenceIds = new Set(evidenceRows.map(tx => tx.id))
+  const evidenceAlertCount = selected ? alertModels.filter(alert => alert.commitmentId === selectedId
+    || alert.transactions.some(row => evidenceIds.has(row.id))).length : 0
 
   if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') {
     return (
@@ -530,7 +547,10 @@ export default function App() {
                   />}
                 </section>
 
-                <section className="panel alerts-panel">
+                {redesigned ? <div>
+                  <AlertCards {...alertProps} previewLimit={3} />
+                  <button className="text-button" type="button" onClick={() => setPage('Review')}>See all review signals</button>
+                </div> : <section className="panel alerts-panel">
                   <div className="panel-heading">
                     <div>
                       <h2>Needs a closer look</h2>
@@ -574,7 +594,7 @@ export default function App() {
                   >
                     See all review signals
                   </button>
-                </section>
+                </section>}
               </section>
             </>
           )}
@@ -714,8 +734,9 @@ export default function App() {
           )}
 
           {page === 'Evaluation & Audit' && <><p className="stat-note">Static benchmark</p><BenchmarkDashboard /></>}
-          {page === 'Review' && <TransactionReview key={statement?.analysis_id ?? 'demo'}
-            alerts={alerts} transactions={transactions} commitments={commitments} formatAmount={money} onSelect={setSelected} />}
+          {page === 'Review' && (redesigned ? <AlertCards {...alertProps} />
+            : <TransactionReview key={statement?.analysis_id ?? 'demo'} alerts={alerts}
+              transactions={transactions} commitments={commitments} formatAmount={money} onSelect={setSelected} />)}
           {page === 'Ask FinSight' && <LedgerAssistant key={statement?.analysis_id ?? 'demo'}
             alerts={alerts} transactions={transactions} commitments={commitments}
             formatAmount={money} nameFor={commitmentName} onSelect={setSelected} onNavigate={setPage} />}
@@ -841,6 +862,9 @@ export default function App() {
 
             {redesigned && <ObservedEvidence rows={evidenceRows} currency={ledgerCurrency(selected.currency, summary.currency)}
               loading={needsDemoEvidence && !activeEvidence} error={activeEvidence?.error ?? false} />}
+
+            {redesigned && <SarvamEvidenceContext contextKey={JSON.stringify([workspaceKey, selectedId])}
+              evidence={{ evidence_type: 'review', count: evidenceAlertCount }} requestExplanation={explainWithSarvam} />}
 
             {selectedGuidance?.summary && <p className="tracker-summary">{selectedGuidance.summary}</p>}
             {selectedGuide && selectedGuide.steps.length > 0 && selectedId && (
