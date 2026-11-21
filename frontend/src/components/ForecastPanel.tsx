@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { buildCommitmentForecast, shortHistoryObservations } from './milestones'
 import { ReminderPanel } from './ReminderPanel'
 import { CashBufferPlanner } from './CashBufferPlanner'
-import { observedStatementWindow, staleHistoryDays } from './forecastReliability'
+import { commitmentFreshnessWarning, observedStatementWindow, staleHistoryDays } from './forecastReliability'
 import './ForecastPanel.css'
 
 type RecordData = Record<string, unknown>
@@ -24,6 +24,10 @@ export function ForecastPanel({ commitments, transactions, nameFor, formatAmount
   const observed = observedStatementWindow(transactions, today)
   const shortHistoryCount = commitments.filter(item => typeof item.transaction_count === 'number'
     && item.transaction_count < shortHistoryObservations).length
+  const freshnessWarnings = commitments.flatMap(commitment => {
+    const reason = commitmentFreshnessWarning(commitment)
+    return reason ? [{ commitment, reason }] : []
+  })
   const horizonTotal = forecast.entries.reduce((total, entry) => total + (entry.amount ?? 0), 0)
   const savings = forecast.annualized.reduce((total, entry) =>
     selected.includes(String(entry.commitment.commitment_id)) && !reportedFor(entry.commitment)
@@ -55,6 +59,14 @@ export function ForecastPanel({ commitments, transactions, nameFor, formatAmount
         {observed?.stale && <p><strong>Stale history.</strong> The latest loaded transaction is more than {staleHistoryDays} days old. Import newer records before relying on estimates.</p>}
         {shortHistoryCount > 0 && <p><strong>Limited observations.</strong> {shortHistoryCount} recurring patterns have fewer than {shortHistoryObservations} supporting transactions.</p>}
         <p><strong>Coverage unverified.</strong> The observed date range may omit days, accounts, or transactions.</p>
+        {freshnessWarnings.length > 0 && (
+          <details>
+            <summary>Commitment freshness warnings ({freshnessWarnings.length})</summary>
+            <ul>{freshnessWarnings.map(({ commitment, reason }) => (
+              <li key={String(commitment.commitment_id)}><strong>{nameFor(commitment)}.</strong> {reason}</li>
+            ))}</ul>
+          </details>
+        )}
       </div>
       <dl className="forecast-summary">
         <div><dt>Known estimates in 30 days</dt><dd>{formatAmount(horizonTotal)}</dd></div>
