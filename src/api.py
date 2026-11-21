@@ -166,7 +166,7 @@ def as_bool(value, default=False):
 
 def make_commitment_id(candidate_id: str, description: str, cadence: str) -> str:
     raw = f"{candidate_id}|{normalized(description)}|{cadence.lower()}"
-    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
+    digest = hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:10]
     return f"c_{digest}"
 
 
@@ -268,6 +268,65 @@ def load_commitments() -> list[dict]:
 
 def amount_label(amount, currency):
     return f"{amount:.2f} statement units" if currency == "unspecified" else f"{currency} {amount:.2f}"
+
+
+def compute_forecast_quality(commitment: dict, as_of_date: str) -> dict:
+    from datetime import date
+
+    def parse_date(value):
+        if not value:
+            return None
+        try:
+            return date.fromisoformat(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+
+    first_observed = parse_date(commitment.get("first_observed_date"))
+    last_observed = parse_date(commitment.get("last_observed_date"))
+    as_of = parse_date(as_of_date)
+
+    statement_days_covered = (
+        (last_observed - first_observed).days
+        if first_observed is not None and last_observed is not None
+        else 0
+    )
+
+    last_observed_days_ago = (
+        (as_of - last_observed).days
+        if as_of is not None and last_observed is not None
+        else 999
+    )
+
+    transaction_ids = commitment.get("transaction_ids")
+    observation_count = 0 if not transaction_ids else len(transaction_ids)
+
+    stale_by_date = last_observed_days_ago > 60
+    stale_by_count = observation_count < 3
+    staleness_warning = stale_by_date or stale_by_count
+
+    if stale_by_date and stale_by_count:
+        staleness_reason = (
+            f"Last charge observed {last_observed_days_ago} days ago; "
+            "fewer than 3 observations on record."
+        )
+    elif stale_by_date:
+        staleness_reason = f"Last charge observed {last_observed_days_ago} days ago."
+    elif stale_by_count:
+        staleness_reason = "Fewer than 3 observations on record."
+    else:
+        staleness_reason = ""
+
+    cadence = commitment.get("cadence") or ""
+    cadence_estimate_reliable = cadence.lower() not in {"irregular", "unknown"}
+
+    return {
+        "statement_days_covered": statement_days_covered,
+        "last_observed_days_ago": last_observed_days_ago,
+        "observation_count": observation_count,
+        "staleness_warning": staleness_warning,
+        "staleness_reason": staleness_reason,
+        "cadence_estimate_reliable": cadence_estimate_reliable,
+    }
 
 
 def build_commitments(transactions, candidate_rows, currency="INR") -> list[dict]:
@@ -412,6 +471,11 @@ def build_commitments(transactions, candidate_rows, currency="INR") -> list[dict
             "evidence": evidence,
             "cancellation_guidance": cancellation_info,
         })
+
+    from datetime import date as _date
+    as_of = _date.today().isoformat()
+    for commitment in commitments:
+        commitment["forecast_quality"] = compute_forecast_quality(commitment, as_of)
 
     return commitments
 

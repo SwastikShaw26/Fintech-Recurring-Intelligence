@@ -40,7 +40,7 @@ def refresh(name, signature, expected, command, env):
 
 def ready(url):
     try:
-        with urlopen(url + "/api/ready", timeout=0.4) as response:
+        with urlopen(url + "/api/ready", timeout=0.4) as response:  # nosec B310
             return json.load(response).get("status") == "ready"
     except (OSError, ValueError):
         return False

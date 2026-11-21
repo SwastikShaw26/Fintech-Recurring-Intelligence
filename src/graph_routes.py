@@ -87,3 +87,26 @@ async def list_classified_commitments(
         "commitments": matching,
         "count": len(matching),
     }
+
+
+@router.get("/summary/business")
+def get_business_summary(analysis_id: str):
+    if not analysis_id or not analysis_id.strip():
+        raise HTTPException(status_code=400, detail="analysis_id is required.")
+
+    classified = [
+        entry
+        for entry in _classifications.values()
+        if entry.get("analysis_id") == analysis_id
+        and entry.get("expense_category") == "business"
+    ]
+
+    total_commitments = len(classified)
+    commitment_ids = [entry["commitment_id"] for entry in classified]
+
+    return {
+        "analysis_id": analysis_id,
+        "total_business_commitments": total_commitments,
+        "commitment_ids": commitment_ids,
+    }
+

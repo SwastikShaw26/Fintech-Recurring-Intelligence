@@ -93,7 +93,7 @@ def load_statements(path, keys):
     placeholders = ", ".join("?" for _ in keys)
     with closing(open_store(path)) as connection:
         rows = connection.execute(
-            f"SELECT account_key, label, payload FROM account_workspaces WHERE account_key IN ({placeholders})",
+            f"SELECT account_key, label, payload FROM account_workspaces WHERE account_key IN ({placeholders})",  # nosec B608
             tuple(keys),
         )
         return {key: (label, json.loads(payload)) for key, label, payload in rows}
