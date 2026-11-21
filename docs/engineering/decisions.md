@@ -29,3 +29,7 @@ The user approved the five numbered product expansions from the latest re-audit.
 ## Sarvam explanations for Ask FinSight
 
 The user approved an optional English or Hindi explanation of local ledger evidence. The browser submits the evidence type, count, and forecast window when applicable. The local FastAPI wrapper requires consent and constructs the provider prompt from those fields. The existing ledger answer remains available independently of the provider.
+
+## FinSight frontend redesign
+
+The user approved a seven-step redesign with a verification and approval gate after every step. Step 1 gives the existing page tree a redesigned shell and a Classic layout option. Both layouts share the selected page, workspace, and import state. The layout choice stays in the current tab. The redesign uses the agreed teal, indigo, and amber tokens and the existing dependency stack.

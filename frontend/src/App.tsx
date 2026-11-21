@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { BenchmarkDashboard } from './components/BenchmarkDashboard'
+import { AppShell } from './components/AppShell'
 import { RevocationTracker } from './components/RevocationTracker'
 import { SubscriptionTimeline } from './components/SubscriptionTimeline'
 import { emptyRevocationState, getStoredRevocationState, type RevocationState } from './components/revocationStorage'
@@ -375,42 +376,9 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
-      <a className="skip-link" href="#main-content">Skip to main content</a>
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-name">FinSight</div>
-          <div className="brand-subtitle">Payment evidence</div>
-        </div>
-
-        <nav className="navigation" aria-label="Main navigation">
-          {navItems.map(({ name, icon: Icon }) => (
-            <button
-              key={name}
-              className={`nav-item ${page === name ? 'active' : ''}`}
-              onClick={() => setPage(name)}
-              aria-current={page === name ? 'page' : undefined}
-              type="button"
-            >
-              <Icon size={18} strokeWidth={1.75} />
-              <span>{name === 'Evaluation & Audit' ? 'Evaluation & audit' : name}</span>
-              {name === 'Recurring payments' && commitments.length > 0 && (
-                <span className="nav-count">{commitments.length}</span>
-              )}
-            </button>
-          ))}
-        </nav>
-
-        <p className="sidebar-note">{privateMode ? 'Private workspace' : 'Demo workspace'}<br />{privateMode ? 'Statement in this tab' : 'Synthetic transaction records'}</p>
-      </aside>
-
-      <main className="main-area" id="main-content">
-        <header className="topbar">
-          <div className="breadcrumb"><span>Workspace</span><strong>{pageLabel}</strong></div>
-
-          <span className="data-source">{privateMode ? 'Private statement data' : 'Synthetic transaction data'}</span>
-        </header>
-
+    <>
+      <AppShell page={page} pageLabel={pageLabel} navItems={navItems} onNavigate={setPage}
+        commitmentCount={commitments.length} privateMode={privateMode}>
         <div className="page-content">
           <section className="welcome-row">
             <div>
@@ -787,7 +755,7 @@ export default function App() {
             {privateMode ? (HOSTED ? 'This analysis is open in your hosted workspace.' : 'Private results are held in this tab.') : 'Synthetic demo records.'} Detected patterns are estimates, not proof of an active payment mandate.
           </footer>
         </div>
-      </main>
+      </AppShell>
 
       {selected && (
         <div ref={modalRef} className="modal-backdrop" onMouseDown={(event) => {
@@ -893,7 +861,7 @@ export default function App() {
           </section>
         </div>
       )}
-    </div>
+    </>
   )
 }
 

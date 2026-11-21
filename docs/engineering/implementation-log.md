@@ -290,3 +290,9 @@ Independent review caught a stale list entry after deleting through a Unicode-eq
 - Both local launchers use the Sarvam wrapper. The wrapper runs the existing FastAPI lifespan on the mounted app. The default provider model is `sarvam-105b-conversations`.
 - The frontend production build and targeted ESLint passed, along with 26 frontend tests. The Python suite reported `73 passed, 1 skipped, 1 warning`. The Vite proxy returned HTTP 200 for health, 403 for missing consent, and 503 when the provider key was absent.
 - Headless Chrome with stubbed responses verified consent gating, loading, stale-response suppression, Hindi display, the minimal request payload, and the provider-error fallback. The backend test verified the outgoing aggregate prompt. Live generation requires a server-side `SARVAM_API_KEY`.
+
+## Frontend redesign step 1
+
+- Added a shared app shell with a keyboard-operable Redesigned / Classic toggle. Both modes use the same page content and application state.
+- TypeScript, ESLint, and the production build passed. Frontend tests reported 31 passed. Python reported 84 passed and one hosted storage module skipped because Alembic was unavailable.
+- The Chrome regression first failed on the previous build because the layout control was absent. It passed with the new shell, covering the demo timeline and synthetic CSV mapping, analysis, commitment evidence, alert evidence, and forecast across layout switches. It also checked keyboard activation, dialog focus return, and 320 px viewport overflow.
