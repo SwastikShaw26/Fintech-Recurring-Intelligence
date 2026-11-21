@@ -63,7 +63,7 @@ export function LedgerAssistant({ commitments, transactions, alerts, formatAmoun
         <section className="review-evidence" aria-labelledby="ledger-answer-heading" aria-live="polite">
           <h3 id="ledger-answer-heading">Ledger answer</h3>
           {answer.kind === 'unsupported' && (
-            <p>This query is not a preset table filter. You can click a suggested question above to filter specific records, or ask Sarvam AI below to answer your custom question based on your loaded ledger.</p>
+            <p>✨ <strong>Ask Sarvam AI:</strong> This is a custom question — scroll down to the <em>AI explanation</em> panel, check consent, and click <strong>Explain with Sarvam AI</strong> to get a contextual answer from your loaded ledger.</p>
           )}
           {answer.kind === 'forecast' && (
             <>
