@@ -32,6 +32,8 @@ import { HostedWorkspace } from './components/HostedWorkspace'
 import { revokeHostedSession } from './components/statementRequest'
 import { ForecastPanel } from './components/ForecastPanel'
 import { ForecastCard } from './components/ForecastCard'
+import { CommitmentBreakdown } from './components/CommitmentBreakdown'
+import { observedStatementWindow } from './components/forecastReliability'
 import { GraphEvidencePanel } from './components/GraphEvidencePanel'
 import { BusinessExpensePlanner } from './components/BusinessExpensePlanner'
 import { TransactionReview } from './components/TransactionReview'
@@ -393,9 +395,10 @@ export default function App() {
   const evidenceIds = new Set(evidenceRows.map(tx => tx.id))
   const evidenceAlertCount = selected ? alertModels.filter(alert => alert.commitmentId === selectedId
     || alert.transactions.some(row => evidenceIds.has(row.id))).length : 0
-  const forecastChart = redesigned && <ForecastCard key={workspaceKey} commitments={commitments}
+  const forecastChart = redesigned && <ForecastCard key={`forecast:${workspaceKey}`} commitments={commitments}
     transactions={transactions} currency={summary.currency} nameFor={commitmentName}
     loading={ledgerState.loading} error={ledgerState.error ? error : null} />
+  const observedWindow = redesigned && page === 'Overview' ? observedStatementWindow(transactions, asOf) : null
 
   if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') {
     return (
@@ -608,6 +611,12 @@ export default function App() {
                   </button>
                 </section>}
               </section>
+              {redesigned && <CommitmentBreakdown key={`breakdown:${workspaceKey}`} commitments={commitments} currency={summary.currency}
+                nameFor={commitmentName} loading={ledgerState.loading} error={ledgerState.error ? error : null}
+                scope={{
+                  workspace: statement?.local_account ?? (privateMode ? (HOSTED ? 'Hosted analysis' : 'Imported statement') : 'Synthetic demo'),
+                  observedFrom: observedWindow?.first, observedTo: observedWindow?.last, reviewSignals: alerts.length,
+                }} />}
             </>
           )}
 

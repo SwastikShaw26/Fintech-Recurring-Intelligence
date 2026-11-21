@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 
 const { chromium } = await import(process.env.FINSIGHT_PLAYWRIGHT
@@ -19,6 +20,14 @@ try {
   await page.getByText('Synthetic transaction data', { exact: true }).waitFor()
   await page.getByText('Observed recurring debits', { exact: true }).waitFor()
   await page.getByRole('region', { name: 'Subscription timeline' }).locator('.milestone-event').first().waitFor()
+  const summary = page.getByRole('region', { name: 'Workspace summary and recurring costs' })
+  await summary.getByRole('button', { name: 'Merchant', exact: true }).click()
+  await summary.getByRole('table', { name: 'By merchant' }).waitFor()
+  const downloadEvent = page.waitForEvent('download')
+  await summary.getByRole('button', { name: 'Download cost summary CSV' }).click()
+  const download = await downloadEvent
+  assert.equal(download.suggestedFilename(), 'finsight-recurring-cost-summary.csv')
+  assert.match(await readFile(await download.path(), 'utf8'), /INR,Total,Known annualized estimates,.*Inferred,Synthetic demo/)
   assert.equal(await redesigned.getAttribute('aria-pressed'), 'true')
   await classic.focus()
   await classic.press('Enter')
