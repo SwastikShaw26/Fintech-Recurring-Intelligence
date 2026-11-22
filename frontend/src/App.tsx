@@ -149,6 +149,11 @@ export default function App() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [graphEvidenceState, setGraphEvidenceState] = useState<{
+    loading: boolean
+    data: AnyRecord | null
+    error: string | null
+  }>({ loading: false, data: null, error: null })
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const previouslyFocusedRef = useRef<HTMLElement | null>(null)
 
@@ -368,6 +373,58 @@ export default function App() {
     })
     return () => controller.abort()
   }, [needsDemoEvidence, selected, selectedId])
+
+  useEffect(() => {
+    if (!selected || !selectedId) {
+      setGraphEvidenceState({ loading: false, data: null, error: null })
+      return
+    }
+
+    const analysisId = statement?.analysis_id ?? 'demo'
+    const controller = new AbortController()
+
+    setGraphEvidenceState({ loading: true, data: null, error: null })
+
+    const token = localStorage.getItem('finsight_token')
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    fetch(`${API}/api/graph/commitment/${encodeURIComponent(selectedId)}/evidence?analysis_id=${encodeURIComponent(analysisId)}`, {
+      signal: controller.signal,
+      headers,
+    })
+      .then(async (res) => {
+        const body = await res.json().catch(() => null)
+        if (!res.ok) {
+          const detail = body?.detail
+          const errMessage = typeof detail === 'string'
+            ? detail
+            : typeof detail?.error === 'string'
+            ? detail.error
+            : body?.error || 'Graph evidence unavailable'
+          throw new Error(errMessage)
+        }
+        return body
+      })
+      .then((data) => {
+        if (!controller.signal.aborted) {
+          setGraphEvidenceState({ loading: false, data, error: null })
+        }
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) {
+          setGraphEvidenceState({
+            loading: false,
+            data: null,
+            error: err instanceof Error ? err.message : 'Graph evidence unavailable',
+          })
+        }
+      })
+
+    return () => controller.abort()
+  }, [selected, selectedId, statement?.analysis_id])
   const activeEvidence = needsDemoEvidence && demoEvidence?.commitment === selected ? demoEvidence : null
   const evidenceRows = selected && activeEvidence && !activeEvidence.error
     ? linkedDebits(selected, [...transactions, ...activeEvidence.rows]) : loadedEvidence
@@ -886,6 +943,167 @@ export default function App() {
             {selectedId && !HOSTED && statement?.analysis_id && <GraphExpenseReview
               key={JSON.stringify(['expense-review', workspaceKey, selectedId])}
               api={API} analysisId={statement.analysis_id} commitmentId={selectedId} />}
+
+            {/* Neo4j Evidence Panel */}
+            <div className="neo4j-evidence-panel" style={{
+              marginTop: '1.25rem',
+              padding: '1rem',
+              backgroundColor: 'var(--canvas, #f8fafc)',
+              borderRadius: 'var(--radius-panel, 8px)',
+              border: '1px solid var(--rule, #e2e8f0)',
+            }}>
+              <strong style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.95rem', color: 'var(--ink, #0f172a)' }}>
+                Neo4j Graph Evidence
+              </strong>
+
+              {graphEvidenceState.loading && (
+                <p className="muted" style={{ color: 'var(--muted, #64748b)', margin: 0, fontSize: '0.875rem' }}>
+                  Loading graph evidence...
+                </p>
+              )}
+
+              {Boolean(!graphEvidenceState.loading && graphEvidenceState.error) && (
+                <p className="muted" style={{ color: 'var(--muted, #64748b)', margin: 0, fontSize: '0.875rem' }}>
+                  {graphEvidenceState.error}
+                </p>
+              )}
+
+              {!graphEvidenceState.loading && !graphEvidenceState.error && Boolean(graphEvidenceState.data && !graphEvidenceState.data.graph_available) && (
+                <p className="muted" style={{ color: 'var(--muted, #64748b)', margin: 0, fontSize: '0.875rem' }}>
+                  Graph evidence unavailable
+                </p>
+              )}
+
+              {!graphEvidenceState.loading && !graphEvidenceState.error && Boolean(graphEvidenceState.data?.graph_available) && (() => {
+                const evidenceData = graphEvidenceState.data!
+                const merchant = (evidenceData.merchant ?? {}) as { display_name?: string; resolution_method?: string; merchant_id?: string | null }
+                const rawTransactions = Array.isArray(evidenceData.supporting_transactions)
+                  ? (evidenceData.supporting_transactions as Array<{ transaction_id: string; date: string; amount: number; direction?: string; description?: string }>)
+                  : []
+
+                const sortedTx = [...rawTransactions].sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+                const count = sortedTx.length
+
+                const svgWidth = 500
+                const svgHeight = 80
+                const padding = 50
+                const baselineY = 28
+
+                return (
+                  <div>
+                    {/* Merchant Node Card */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem',
+                      padding: '0.75rem',
+                      backgroundColor: 'var(--paper, #ffffff)',
+                      borderRadius: 'var(--radius-control, 6px)',
+                      border: '1px solid var(--rule-strong, #cbd5e1)',
+                      marginBottom: '1rem',
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--quiet, #64748b)', letterSpacing: '0.05em' }}>
+                          Merchant
+                        </div>
+                        <div style={{ fontWeight: 600, color: 'var(--ink, #0f172a)', fontSize: '1rem' }}>
+                          {merchant.display_name || 'Unknown Merchant'}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: '9999px',
+                          fontSize: '0.75rem',
+                          fontWeight: 500,
+                          backgroundColor: merchant.resolution_method === 'graph' ? 'var(--evergreen-soft, #e2e9e2)' : 'var(--attention-wash, #fef3c7)',
+                          color: merchant.resolution_method === 'graph' ? 'var(--evergreen, #24563f)' : 'var(--attention, #b45309)',
+                          border: `1px solid ${merchant.resolution_method === 'graph' ? 'var(--evergreen, #24563f)' : 'var(--attention, #b45309)'}`,
+                        }}>
+                          {merchant.resolution_method || 'unresolved'}
+                        </span>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--muted, #475569)' }}>
+                          {count} {count === 1 ? 'transaction' : 'transactions'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Transaction Timeline */}
+                    <div style={{ width: '100%', overflowX: 'auto' }}>
+                      <strong style={{ display: 'block', fontSize: '0.8rem', color: 'var(--quiet, #64748b)', marginBottom: '0.25rem' }}>
+                        Transaction Timeline
+                      </strong>
+                      {count === 0 ? (
+                        <p className="muted" style={{ fontSize: '0.85rem', color: 'var(--muted, #64748b)', margin: '0.5rem 0' }}>
+                          No supporting transactions found.
+                        </p>
+                      ) : (
+                        <svg
+                          viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                          style={{ width: '100%', height: `${svgHeight}px`, display: 'block' }}
+                        >
+                          {/* Baseline */}
+                          <line
+                            x1={padding}
+                            y1={baselineY}
+                            x2={svgWidth - padding}
+                            y2={baselineY}
+                            stroke="var(--rule-strong, #94a3b8)"
+                            strokeWidth="2"
+                            strokeDasharray={count === 1 ? "4 4" : undefined}
+                          />
+
+                          {/* Dots and Labels */}
+                          {sortedTx.map((tx, idx) => {
+                            const cx = count === 1
+                              ? svgWidth / 2
+                              : padding + (idx / (count - 1)) * (svgWidth - 2 * padding)
+
+                            return (
+                              <g key={tx.transaction_id || idx}>
+                                <circle
+                                  cx={cx}
+                                  cy={baselineY}
+                                  r="5"
+                                  fill="var(--evergreen, #24563f)"
+                                  stroke="var(--paper, #ffffff)"
+                                  strokeWidth="2"
+                                />
+                                <text
+                                  x={cx}
+                                  y={baselineY + 20}
+                                  textAnchor="middle"
+                                  fontSize="10"
+                                  fontFamily="var(--font-mono, monospace)"
+                                  fill="var(--ink, #0f172a)"
+                                >
+                                  {tx.date || ''}
+                                </text>
+                                <text
+                                  x={cx}
+                                  y={baselineY + 34}
+                                  textAnchor="middle"
+                                  fontSize="10"
+                                  fontWeight="600"
+                                  fontFamily="var(--font-sans, sans-serif)"
+                                  fill="var(--muted, #475569)"
+                                >
+                                  {money(Math.abs(tx.amount || 0))}
+                                </text>
+                              </g>
+                            )
+                          })}
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
 
             {redesigned && <ObservedEvidence rows={evidenceRows} currency={ledgerCurrency(selected.currency, summary.currency)}
               loading={needsDemoEvidence && !activeEvidence} error={activeEvidence?.error ?? false} />}
