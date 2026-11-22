@@ -133,7 +133,10 @@ def main():
 
     # 7. Tests & Coverage
     header(7, "Test Suite Execution", "pytest tests/ -q")
-    out_pt, _ = run(f'"{PYTHON_EXE}" -m pytest tests/test_security_reliability.py tests/test_user_auth.py -q')
+    # Use sys.executable directly (not venv wrapper) to avoid sandbox socket restrictions on Windows
+    out_pt, _ = run([sys.executable, "-m", "pytest",
+                     "tests/test_security_reliability.py", "tests/test_user_auth.py",
+                     "-q", "--timeout=30"])
     print(out_pt if out_pt else "No output.")
     pt_fails = len(re.findall(r"\bFAILED\b", out_pt))
     summary(high=pt_fails)

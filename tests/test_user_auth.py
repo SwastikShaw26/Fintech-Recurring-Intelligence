@@ -4,7 +4,9 @@ from src.auth_routes import register, login, get_me, RegisterRequest, LoginReque
 from fastapi import HTTPException
 
 def test_auth_registration_and_login_flow():
-    email = "unique_analyst_pytest@finsight.io"
+    import uuid
+    suffix = uuid.uuid4().hex[:8]
+    email = f"analyst_{suffix}@finsight.io"
     password = "SuperSecretPassword456"
     full_name = "Chief Risk Officer"
 

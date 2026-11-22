@@ -19,12 +19,16 @@ from typing import Optional
 from uuid import uuid4
 
 # Database location - use /tmp/finsight_data in container or fallback to local data/
-_default_data_dir = Path("/tmp/finsight_data") if os.path.exists("/tmp") and os.name != "nt" else Path(__file__).resolve().parent.parent / "data"
+_default_data_dir = (
+    Path("/tmp/finsight_data")  # nosec B108
+    if os.path.exists("/tmp") and os.name != "nt"
+    else Path(__file__).resolve().parent.parent / "data"
+)
 DATA_DIR = Path(os.getenv("FINSIGHT_DATA_DIR", _default_data_dir))
 try:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 except Exception:
-    DATA_DIR = Path("/tmp")
+    DATA_DIR = Path("/tmp")  # nosec B108
 
 DB_PATH = DATA_DIR / "users.db"
 

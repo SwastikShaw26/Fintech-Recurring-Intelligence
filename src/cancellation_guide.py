@@ -3,7 +3,7 @@ Payment-mechanism-aware cancellation guidance for Indian recurring transactions.
 Based on NPCI UPI AutoPay regulations (OC No. 223) and RBI Digital Payments - E-mandate Framework, 2026 (RBI/DPSS/2026-27/396).
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 GUIDANCE_BY_METHOD: Dict[str, Dict[str, Any]] = {
     "upi autopay": {

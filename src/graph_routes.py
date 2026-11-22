@@ -3,7 +3,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
 
 from .auth import verify_token
-from .neo4j_service import get_commitment_evidence, is_available
+from .neo4j_service import get_commitment_evidence
 
 router = APIRouter(prefix="/graph", tags=["graph"])
 

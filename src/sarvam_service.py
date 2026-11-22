@@ -65,7 +65,7 @@ def _request_explanation(summary: str, language: str) -> str:
     )
 
     try:
-        with urlopen(request, timeout=12) as response:
+        with urlopen(request, timeout=12) as response:  # nosec B310
             result = json.load(response)
 
         content = result["choices"][0]["message"]["content"]

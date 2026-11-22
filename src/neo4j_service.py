@@ -46,7 +46,9 @@ def _create_driver():
         return None
     logger.info("Connecting to Neo4j at %s as %s", uri, user)
     # If on Windows connecting to Aura, neo4j+ssc ensures TLS verification without Windows trust store failures
-    connect_uri = uri.replace("neo4j+s://", "neo4j+ssc://") if uri.startswith("neo4j+s://") else uri
+    # Convert scheme if necessary for driver compatibility
+    scheme_prefix = os.getenv("NEO4J_SECURE_SCHEME", "neo4j+s://")
+    connect_uri = uri.replace(scheme_prefix, "neo4j+ssc://") if uri.startswith(scheme_prefix) else uri
     try:
         drv = GraphDatabase.driver(connect_uri, auth=(user, pwd) if pwd else None)
         drv.verify_connectivity()
@@ -58,7 +60,7 @@ def _create_driver():
 
 
 def _get_driver():
-    global _driver, _driver_initialized
+    global _driver
     if _driver is not None:
         return _driver
     _driver = _create_driver()

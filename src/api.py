@@ -6,7 +6,6 @@ import json
 import os
 import sqlite3
 from contextlib import asynccontextmanager
-from datetime import date
 from io import StringIO
 from pathlib import Path
 from statistics import median
@@ -843,7 +842,6 @@ def analyze_statement(payload, user_id="guest"):
 async def private_statement(request: Request):
     if os.getenv("FINSIGHT_DEPLOYMENT_MODE", "local") not in ("local", "private"):
         raise HTTPException(status_code=404, detail="Private import is available in local mode.")
-    host = request.url.hostname
     origin = request.headers.get("origin")
     same_origin = f"{request.url.scheme}://{request.url.netloc}"
     if origin is not None and origin not in {same_origin, *DEFAULT_ALLOWED_ORIGINS}:
