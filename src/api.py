@@ -16,6 +16,8 @@ from fastapi import FastAPI, HTTPException, Path as FastApiPath, Query, Request,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 
 from src.cancellation_guide import get_cancellation_guidance
 from src.detect_recurring_v3 import detect, load_aliases
@@ -106,6 +108,29 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "Accept"],
 )
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: StarletteRequest, call_next):
+        response = await call_next(request)
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self'; "
+            "font-src 'self' data:; "
+            "frame-ancestors 'none'"
+        )
+        response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 @app.middleware("http")
