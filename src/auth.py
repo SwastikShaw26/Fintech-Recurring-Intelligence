@@ -1,9 +1,8 @@
-"""Production-grade user authentication and SQLite user database for FinSight.
+"""Production-grade user authentication and PostgreSQL/SQLite user database for FinSight.
 
-Uses zero third-party dependencies:
 - Password hashing: hashlib.pbkdf2_hmac with SHA-256 (100,000 iterations + 16-byte cryptographically secure salt)
 - Tokens: Cryptographic HMAC-SHA256 signed bearer tokens with expiration
-- Storage: Thread-safe SQLite database with WAL journal mode
+- Storage: SQLAlchemy PostgreSQL for hosted deployments, SQLite for local fallback
 """
 
 import hashlib
@@ -11,12 +10,13 @@ import hmac
 import json
 import os
 import secrets
-import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
+
+from sqlalchemy import create_engine, text
 
 # Database location - use /tmp/finsight_data in container or fallback to local data/
 _default_data_dir = (
@@ -31,6 +31,36 @@ except Exception:
     DATA_DIR = Path("/tmp")  # nosec B108
 
 DB_PATH = DATA_DIR / "users.db"
+
+
+def _create_sqlite_engine():
+    return create_engine(
+        f"sqlite:///{DB_PATH}",
+        connect_args={"check_same_thread": False},
+    )
+
+
+_database_url = os.environ.get("FINSIGHT_HOSTED_DATABASE_URL", "")
+if _database_url:
+    try:
+        engine = create_engine(
+            _database_url,
+            pool_pre_ping=True,
+            pool_timeout=5,
+            hide_parameters=True,
+            connect_args={"connect_timeout": 5},
+        )
+        with engine.connect():
+            pass
+    except Exception:
+        try:
+            engine.dispose()
+        except Exception:
+            pass
+        engine = _create_sqlite_engine()
+else:
+    engine = _create_sqlite_engine()
+
 
 # Secret key for HMAC token signing (prefers env var, fallback to safe deterministic machine secret or memory)
 AUTH_SECRET = os.getenv("FINSIGHT_AUTH_SECRET", "")
@@ -47,35 +77,32 @@ if not AUTH_SECRET:
 TOKEN_EXPIRY_SECONDS = 7 * 24 * 3600  # 7 days
 
 
-def _get_db():
-    try:
-        conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA foreign_keys = ON")
-        return conn
-    except Exception:
-        # Fallback to in-memory database if permission denied
-        conn = sqlite3.connect(":memory:", timeout=10.0)
-        return conn
-
-
 def init_db():
     """Create tables and indexes if they do not exist."""
-    with _get_db() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                user_id TEXT PRIMARY KEY,
-                email TEXT UNIQUE NOT NULL COLLATE NOCASE,
-                full_name TEXT NOT NULL,
-                password_hash TEXT NOT NULL,
-                salt TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            )
-        """)
-        conn.execute("CREATE INDEX IF NOT EXISTS ix_users_email ON users(email)")
+    try:
+        with engine.begin() as connection:
+            connection.execute(text("""
+                CREATE TABLE IF NOT EXISTS finsight_users (
+                    user_id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    full_name TEXT NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    salt TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """))
+            connection.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_finsight_users_email ON finsight_users(email)"
+            ))
+    except Exception:
+        # Auth storage must not prevent the application from starting.
+        pass
 
 
-init_db()
+try:
+    init_db()
+except Exception:
+    pass
 
 
 def hash_password(password: str, salt: Optional[str] = None) -> tuple[str, str]:
@@ -155,13 +182,24 @@ def register_user(email: str, password: str, full_name: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
 
     try:
-        with _get_db() as conn:
-            conn.execute(
-                "INSERT INTO users (user_id, email, full_name, password_hash, salt, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (user_id, clean_email, clean_name, pwd_hash, salt, now),
-            )
-    except sqlite3.IntegrityError:
-        raise ValueError("An account with this email address already exists.")
+        with engine.begin() as connection:
+            result = connection.execute(text("""
+                INSERT INTO finsight_users
+                    (user_id, email, full_name, password_hash, salt, created_at)
+                VALUES (:user_id, :email, :full_name, :password_hash, :salt, :created_at)
+                ON CONFLICT (email) DO NOTHING
+            """), {
+                "user_id": user_id,
+                "email": clean_email,
+                "full_name": clean_name,
+                "password_hash": pwd_hash,
+                "salt": salt,
+                "created_at": now,
+            })
+            if result.rowcount == 0:
+                raise ValueError("An account with this email address already exists.")
+    except ValueError:
+        raise
 
     token = create_token(user_id, clean_email)
     return {
@@ -175,17 +213,17 @@ def register_user(email: str, password: str, full_name: str) -> dict:
 def authenticate_user(email: str, password: str) -> dict:
     """Authenticate email & password, returning user info and active token."""
     clean_email = email.strip().lower()
-    with _get_db() as conn:
-        cursor = conn.execute(
-            "SELECT user_id, email, full_name, password_hash, salt FROM users WHERE email = ?",
-            (clean_email,),
-        )
-        row = cursor.fetchone()
+    with engine.connect() as connection:
+        row = connection.execute(text("""
+            SELECT user_id, email, full_name, password_hash, salt
+            FROM finsight_users
+            WHERE email = :email
+        """), {"email": clean_email}).mappings().first()
 
-    if not row or not verify_password(password, row[3], row[4]):
+    if not row or not verify_password(password, row["password_hash"], row["salt"]):
         raise ValueError("Invalid email or password.")
 
-    user_id, email_found, full_name = row[0], row[1], row[2]
+    user_id, email_found, full_name = row["user_id"], row["email"], row["full_name"]
     token = create_token(user_id, email_found)
     return {
         "user_id": user_id,
@@ -197,17 +235,17 @@ def authenticate_user(email: str, password: str) -> dict:
 
 def get_user_by_id(user_id: str) -> Optional[dict]:
     """Retrieve user details by user_id."""
-    with _get_db() as conn:
-        cursor = conn.execute(
-            "SELECT user_id, email, full_name, created_at FROM users WHERE user_id = ?",
-            (user_id,),
-        )
-        row = cursor.fetchone()
+    with engine.connect() as connection:
+        row = connection.execute(text("""
+            SELECT user_id, email, full_name, created_at
+            FROM finsight_users
+            WHERE user_id = :user_id
+        """), {"user_id": user_id}).mappings().first()
     if not row:
         return None
     return {
-        "user_id": row[0],
-        "email": row[1],
-        "full_name": row[2],
-        "created_at": row[3],
+        "user_id": row["user_id"],
+        "email": row["email"],
+        "full_name": row["full_name"],
+        "created_at": row["created_at"],
     }
