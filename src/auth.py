@@ -105,7 +105,7 @@ def create_token(user_id: str, email: str) -> str:
         "exp": int(time.time()) + TOKEN_EXPIRY_SECONDS,
         "rnd": secrets.token_hex(8),
     }
-    raw_payload = secrets.token_urlsafe(16) + "." + json.dumps(payload, separators=(",", ":"))
+    raw_payload = secrets.token_hex(16) + "." + json.dumps(payload, separators=(",", ":"))
     signature = hmac.new(
         AUTH_SECRET.encode("utf-8"),
         raw_payload.encode("utf-8"),
