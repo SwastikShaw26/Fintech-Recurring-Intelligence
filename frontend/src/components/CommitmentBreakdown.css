@@ -5,11 +5,76 @@
 .cost-summary-scope dt { color: var(--muted); font-size: var(--text-xs); }
 .cost-summary-scope dd { margin: 0; overflow-wrap: anywhere; }
 .cost-group-switch { margin-inline-end: var(--space-3); }
-.cost-donut { margin: 0; padding: var(--space-3); background: var(--inset); border-radius: var(--radius-panel); min-width: 0; }
-.cost-donut figcaption { font-weight: 700; }
-.cost-donut svg { display: block; width: min(100%, 10rem); margin: var(--space-2) auto; }
-.cost-donut circle { fill: none; stroke: var(--slice); stroke-width: 15; }
-.cost-donut-track { --slice: var(--rule); }
+.cost-donut {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--inset);
+  border-radius: var(--radius-panel);
+  min-width: 0;
+}
+.cost-donut figcaption { grid-column: 1 / -1; font-weight: 700; }
+.cost-donut-ring { position: relative; width: min(100%, 8.75rem); justify-self: center; }
+.cost-donut-ring svg { display: block; width: 100%; overflow: visible; }
+.cost-donut-track, .cost-donut-segment { fill: none; stroke: var(--slice); stroke-width: 14; }
+.cost-donut-track { --slice: var(--rule); pointer-events: none; }
+.cost-donut-segment {
+  cursor: pointer;
+  pointer-events: visibleStroke;
+  transition: stroke-width 180ms ease, opacity 180ms ease;
+}
+.cost-donut-segment[data-muted="true"] { opacity: 0.37; }
+.cost-donut-segment[data-highlighted="true"],
+.cost-donut-segment[aria-pressed="true"] { stroke-width: 18; }
+.cost-donut-segment:focus-visible { outline: 2px solid var(--evergreen); outline-offset: 2px; }
+.cost-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  padding-inline: 20%;
+  text-align: center;
+  line-height: 1.15;
+  pointer-events: none;
+}
+.cost-donut-center span { font-size: 0.6875rem; color: var(--muted); }
+.cost-donut-center span:first-child {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.cost-donut-center strong {
+  max-width: 100%;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.cost-donut-tooltip {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 0;
+  inset-inline-start: 50%;
+  transform: translate(-50%, -55%);
+  display: grid;
+  gap: 0.125rem;
+  width: max-content;
+  max-width: 12rem;
+  padding: var(--space-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-panel);
+  background: var(--inset);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
 .cost-donut-color-0 { --slice: var(--evergreen); }
 .cost-donut-color-1 { --slice: var(--inferred); }
 .cost-donut-color-2 { --slice: var(--attention); }
@@ -26,4 +91,36 @@
 }
 .cost-donut :is(th, td) { padding: var(--space-1); border-bottom: 1px solid var(--rule); text-align: right; }
 .cost-donut th:first-child { text-align: left; overflow-wrap: anywhere; }
-.cost-donut-chip { display: inline-block; width: 0.7rem; height: 0.7rem; margin-inline-end: var(--space-1); background: var(--slice); border-radius: 50%; }
+.cost-donut tbody th { padding: 0; }
+.cost-donut tr[data-highlighted="true"], .cost-donut tr:has(button[aria-pressed="true"]) {
+  background: color-mix(in srgb, var(--evergreen) 10%, transparent);
+}
+.cost-donut-legend-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 2rem;
+  padding: var(--space-1);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.cost-donut-legend-button:focus-visible { outline: 2px solid var(--evergreen); outline-offset: -2px; }
+.cost-donut-chip { flex: 0 0 0.65rem; height: 0.65rem; background: var(--slice); border-radius: 50%; }
+
+@media (min-width: 640px) {
+  .cost-donut { grid-template-columns: minmax(0, 8.75rem) minmax(0, 1fr); }
+}
+
+@media (pointer: coarse) {
+  .cost-donut-legend-button { min-height: 2.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cost-donut-segment { transition: none; }
+}

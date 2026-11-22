@@ -8,35 +8,85 @@ type ChartSlice = ReturnType<typeof buildCostBreakdown>[number]['merchant'][numb
 function CostDonut({ label, slices, total, formatAmount }: {
   label: string; slices: ChartSlice[]; total: number; formatAmount: (amount: number) => string
 }) {
-  const arcs: { key: string; index: number; length: number; offset: number }[] = []
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null)
+  const [focusedKey, setFocusedKey] = useState<string | null>(null)
+  const selected = slices.find(slice => slice.key === selectedKey)
+  const preview = slices.find(slice => slice.key === (hoveredKey ?? focusedKey))
+  const activeKey = preview?.key ?? selected?.key
+  const share = (amount: number) => total > 0 ? `${(amount / total * 100).toFixed(1)}%` : '—'
+  const arcs: { slice: ChartSlice; index: number; length: number; offset: number }[] = []
   let offset = 0
   if (total > 0) {
     for (const [index, slice] of slices.entries()) {
       const length = slice.amount / total * 100
-      if (length > 0) arcs.push({ key: slice.key, index, length, offset })
+      if (length > 0) arcs.push({ slice, index, length, offset })
       offset += length
     }
   }
+
+  function toggle(key: string) {
+    setSelectedKey(current => current === key ? null : key)
+  }
+
   return (
-    <figure className="cost-donut">
+    <figure className="cost-donut" onKeyDown={event => {
+      if (event.key !== 'Escape' || (!selected && !preview)) return
+      event.stopPropagation()
+      setSelectedKey(null)
+      setFocusedKey(null)
+      setHoveredKey(null)
+    }}>
       <figcaption>{label}</figcaption>
-      {total > 0 && (
-        <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-          <circle className="cost-donut-track" cx="50" cy="50" r="40" />
-          {arcs.map(arc => (
-            <circle key={arc.key} className={`cost-donut-color-${arc.index % 6}`}
-              cx="50" cy="50" r="40" pathLength="100" strokeDasharray={`${arc.length} 100`}
-              strokeDashoffset={-arc.offset} transform="rotate(-90 50 50)" />
+      <div className="cost-donut-ring">
+        <svg viewBox="0 0 100 100" role="group" aria-label={`${label} cost segments`}>
+          <circle className="cost-donut-track" cx="50" cy="50" r="40" aria-hidden="true" />
+          {arcs.map(({ slice, index, length, offset }) => (
+            <circle key={slice.key} className={`cost-donut-segment cost-donut-color-${index % 6}`}
+              cx="50" cy="50" r="40" pathLength="100" strokeDasharray={`${length} 100`}
+              strokeDashoffset={-offset} transform="rotate(-90 50 50)"
+              role="button" tabIndex={0} aria-pressed={selected?.key === slice.key}
+              aria-label={`${slice.label}, ${formatAmount(slice.amount)}, ${share(slice.amount)}`}
+              data-highlighted={activeKey === slice.key} data-muted={activeKey !== undefined && activeKey !== slice.key}
+              onPointerEnter={event => { if (event.pointerType !== 'touch') setHoveredKey(slice.key) }}
+              onPointerLeave={() => setHoveredKey(null)}
+              onFocus={event => { if (event.currentTarget.matches(':focus-visible')) setFocusedKey(slice.key) }}
+              onBlur={() => setFocusedKey(null)}
+              onClick={() => toggle(slice.key)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  if (!event.repeat) toggle(slice.key)
+                }
+              }} />
           ))}
         </svg>
-      )}
+        <div className="cost-donut-center" aria-live="polite" aria-atomic="true">
+          <span>{selected?.label ?? 'Total annual cost'}</span>
+          <strong>{formatAmount(selected?.amount ?? total)}</strong>
+          {selected && <span>{share(selected.amount)}</span>}
+        </div>
+        {preview && <div className="cost-donut-tooltip" role="tooltip">
+          <strong>{preview.label}</strong>
+          <span>{formatAmount(preview.amount)} · {share(preview.amount)}</span>
+        </div>}
+      </div>
       <table>
         <caption>{label}</caption>
         <thead><tr><th scope="col">Group</th><th scope="col">Annual estimate</th><th scope="col">Share</th></tr></thead>
         <tbody>{slices.map((slice, index) => (
-          <tr key={slice.key}>
-            <th scope="row"><span className={`cost-donut-chip cost-donut-color-${index % 6}`} aria-hidden="true" />{slice.label}</th>
-            <td>{formatAmount(slice.amount)}</td><td>{total > 0 ? `${(slice.amount / total * 100).toFixed(1)}%` : '—'}</td>
+          <tr key={slice.key} data-highlighted={activeKey === slice.key}>
+            <th scope="row">
+              <button type="button" className="cost-donut-legend-button" aria-pressed={selected?.key === slice.key}
+                onClick={() => toggle(slice.key)}
+                onPointerEnter={event => { if (event.pointerType !== 'touch') setHoveredKey(slice.key) }}
+                onPointerLeave={() => setHoveredKey(null)}
+                onFocus={event => { if (event.currentTarget.matches(':focus-visible')) setFocusedKey(slice.key) }}
+                onBlur={() => setFocusedKey(null)}>
+                <span className={`cost-donut-chip cost-donut-color-${index % 6}`} aria-hidden="true" />{slice.label}
+              </button>
+            </th>
+            <td>{formatAmount(slice.amount)}</td><td>{share(slice.amount)}</td>
           </tr>
         ))}</tbody>
       </table>
@@ -99,7 +149,7 @@ export function CommitmentBreakdown({ commitments, currency, nameFor, loading, e
                     {group.included > 0 ? (
                       <>
                         <p><strong>{formatAmount(group.total)}</strong> · Inferred annual cost across {group.included} commitments.</p>
-                        <CostDonut label={view === 'cadence' ? 'By cadence' : 'By merchant'}
+                        <CostDonut key={view} label={view === 'cadence' ? 'By cadence' : 'By merchant'}
                           slices={group[view]} total={group.total} formatAmount={formatAmount} />
                       </>
                     ) : <p>No known annualized costs are available for this currency.</p>}
