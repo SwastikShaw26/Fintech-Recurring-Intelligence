@@ -25,7 +25,7 @@ graph TD
     API[src/api.py<br/>canonical FastAPI app]
     Wrapper[src/sarvam_app.py]
     Detector[src/detect_recurring_v3.py]
-    Forecast[build_commitments()<br/>compute_forecast_quality()]
+    Forecast["build_commitments()<br/>compute_forecast_quality()"]
     GraphRoutes[src/graph_routes.py]
     AuthRoutes[src/auth_routes.py]
     Assistant[src/assistant_routes.py]
@@ -61,7 +61,7 @@ ingestion is started separately from the response path.
 ```mermaid
 graph LR
   CSV[CSV statement] --> Preview[POST /api/private-statement<br/>preview]
-  Preview --> Map[parse_statement()<br/>map_statement()]
+  Preview --> Map["parse_statement()<br/>map_statement()"]
   Map --> Detect[detect()<br/>V3 detector]
   Detect --> Build[build_commitments()<br/>compute_forecast_quality()]
   Build --> Result[Analysis response]
