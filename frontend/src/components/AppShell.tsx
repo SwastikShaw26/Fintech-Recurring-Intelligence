@@ -4,24 +4,24 @@ import { LogIn, LogOut } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import './AppShell.css'
 
-export type Layout = 'Redesigned' | 'Classic'
+export type Layout = 'Redesigned'
 type NavItem = { name: string; icon: LucideIcon }
 
-export function AppShell({ page, pageLabel, navItems, onNavigate, commitmentCount, privateMode, layout, onLayoutChange, children }: {
+export function AppShell({ page, pageLabel, navItems, onNavigate, commitmentCount, privateMode, children }: {
   page: string
   pageLabel: string
   navItems: NavItem[]
   onNavigate: (page: string) => void
   commitmentCount: number
   privateMode: boolean
-  layout: Layout
-  onLayoutChange: (mode: Layout) => void
+  layout?: Layout
+  onLayoutChange?: (mode: Layout) => void
   children: ReactNode
 }) {
   const { user, logout, openAuthModal } = useAuth()
 
   return (
-    <div className={layout === 'Redesigned' ? 'app-shell redesigned-shell' : 'app-shell'}>
+    <div className="app-shell redesigned-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside className="sidebar">
         <div className="brand">
@@ -140,14 +140,6 @@ export function AppShell({ page, pageLabel, navItems, onNavigate, commitmentCoun
           <div className="breadcrumb"><span>Workspace</span><strong>{pageLabel}</strong></div>
           <div className="layout-controls">
             <span className="data-source">{privateMode ? 'Private statement data' : 'Synthetic transaction data'}</span>
-            <div className="layout-switch" role="group" aria-label="Workspace layout">
-              <button type="button" aria-pressed={layout === 'Redesigned'} onClick={() => onLayoutChange('Redesigned')}>
-                Redesigned
-              </button>
-              <button type="button" aria-pressed={layout === 'Classic'} onClick={() => onLayoutChange('Classic')}>
-                Classic
-              </button>
-            </div>
           </div>
         </header>
         {children}

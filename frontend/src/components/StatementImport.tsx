@@ -49,7 +49,7 @@ const fields = [
   { key: 'payment_method', label: 'Payment method', required: false },
 ]
 
-export function StatementImport({ request, onAnalyze, existing, hostedToken, redesigned = false }: {
+export function StatementImport({ request, onAnalyze, existing, hostedToken }: {
   request: <T>(payload: object, signal: AbortSignal) => Promise<T>
   onAnalyze: (data: StatementData) => void
   existing: StatementData | null
@@ -82,7 +82,7 @@ export function StatementImport({ request, onAnalyze, existing, hostedToken, red
   const assignedFields = visibleFields.flatMap(({ key }) => (mapping[key] ?? -1) >= 0 ? [[key, mapping[key]] as const] : [])
   const duplicateMapping = new Set(assignedFields.map(([, index]) => index)).size !== assignedFields.length
   const missingRequired = visibleFields.filter(({ key, required }) => required && (mapping[key] ?? -1) < 0)
-  const ready = missingRequired.length === 0 && (!redesigned || !duplicateMapping)
+  const ready = missingRequired.length === 0 && !duplicateMapping
   const currentStage = !preview ? 'Choose CSV' : ready ? 'Analyze' : 'Map columns'
 
   function chooseFiles(files: File[]) {
@@ -199,11 +199,11 @@ export function StatementImport({ request, onAnalyze, existing, hostedToken, red
       <p>Choose a UTF-8 CSV with a header row. Preview stays in this tab. {hostedToken
         ? 'The hosted server receives only mapped columns when you review or analyze. Save explicitly to keep a mapped copy.'
         : 'The local server analyzes only mapped columns, and results stay in this tab until you clear it or reload.'}</p>
-      {redesigned && <ol className="import-stages" aria-label="Statement import stages">
+      <ol className="import-stages" aria-label="Statement import stages">
         {['Choose CSV', 'Map columns', 'Analyze'].map(stage => (
           <li key={stage} aria-current={currentStage === stage ? 'step' : undefined}>{stage}</li>
         ))}
-      </ol>}
+      </ol>
       <div className={`statement-dropzone${dragActive ? ' is-dragging' : ''}`} role="region" aria-label="CSV dropzone" aria-busy={busy}
         onDragEnter={event => {
           event.preventDefault()
@@ -250,14 +250,14 @@ export function StatementImport({ request, onAnalyze, existing, hostedToken, red
             Combine with the current statement. Both exports are for the same account and currency, and cover complete days.
           </label>}
           {merge && <p>Matching rows across exports are counted once per occurrence. Leave this unchecked if either export is filtered or covers only part of a day.</p>}
-          <div className={redesigned ? 'import-mapping-grid' : undefined}>
+          <div className="import-mapping-grid">
             <div className="statement-preview" tabIndex={0} role="region" aria-label="Statement preview">
               <table>
                 <thead><tr>{preview.columns.map((column, index) => <th key={index} scope="col">{column}</th>)}</tr></thead>
                 <tbody>{preview.sample.map((row, index) => <tr key={index}>{row.map((cell, column) => <td key={column}>{cell}</td>)}</tr>)}</tbody>
               </table>
             </div>
-            <fieldset className="statement-mapping" aria-describedby={redesigned ? 'import-mapping-status' : undefined}
+            <fieldset className="statement-mapping" aria-describedby="import-mapping-status"
               disabled={busy || !!review}>
               <legend>Column mapping</legend>
               <label>CSV layout preset
@@ -309,11 +309,11 @@ export function StatementImport({ request, onAnalyze, existing, hostedToken, red
               </label>}
             </fieldset>
           </div>
-          {redesigned && <p id="import-mapping-status" role="status" className={duplicateMapping ? 'statement-error' : undefined}>
+          <p id="import-mapping-status" role="status" className={duplicateMapping ? 'statement-error' : undefined}>
             {duplicateMapping ? 'Choose a different CSV column for each mapped field.'
               : missingRequired.length ? `Map required columns: ${missingRequired.map(field => field.label).join(', ')}.`
                 : 'Required columns mapped. Your statement is ready to analyze.'}
-          </p>}
+          </p>
           {review && <section className="review-evidence" aria-labelledby="overlap-review-title">
             <h3 id="overlap-review-title">Review overlapping rows</h3>
             <p role="status">{review.result.exact_matches} exact matches to skip, {review.result.new_rows} other rows to add, and {review.result.ambiguous_count} possible conflicts.</p>

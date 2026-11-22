@@ -1,10 +1,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import {
-  CheckCircle2,
   Bell,
   CalendarDays,
-  ChevronRight,
   CreditCard,
   LayoutDashboard,
   RefreshCw,
@@ -13,7 +11,7 @@ import {
   X,
 } from 'lucide-react'
 import { BenchmarkDashboard } from './components/BenchmarkDashboard'
-import { AppShell, type Layout } from './components/AppShell'
+import { AppShell } from './components/AppShell'
 import { CommitmentList, LedgerKpis, ObservedEvidence } from './components/LedgerDashboard'
 import { commitmentCards, ledgerCurrency, ledgerKpis, linkedDebits } from './components/ledgerViewModel'
 import { readDemoEvidence, readDemoWorkspace, workspaceRequest } from './services/workspaceRead'
@@ -37,7 +35,6 @@ import { observedStatementWindow } from './components/forecastReliability'
 import { GraphEvidencePanel } from './components/GraphEvidencePanel'
 import { GraphExpenseReview } from './components/GraphExpenseReview'
 import { BusinessExpensePlanner } from './components/BusinessExpensePlanner'
-import { TransactionReview } from './components/TransactionReview'
 import { LedgerAssistant } from './components/LedgerAssistant'
 import { mandateFollowUp } from './components/mandateFollowUp'
 import { buildCommitmentActivity } from './components/commitmentActivity'
@@ -97,34 +94,8 @@ function getArray(data: unknown, ...keys: string[]): AnyRecord[] {
   return []
 }
 
-function getNumber(data: AnyRecord, ...keys: string[]): number {
-  for (const key of keys) {
-    const rawValue = data[key]
-    const value = Number(rawValue)
-    if (rawValue !== null && rawValue !== undefined && Number.isFinite(value)) {
-      return value
-    }
-  }
-  return 0
-}
-
-function evidenceText(alert: AnyRecord): string {
-  if (Array.isArray(alert.evidence)) {
-    return alert.evidence.map(String).join(' ')
-  }
-
-  return String(
-    alert.message ??
-      alert.reason ??
-      alert.detail ??
-      'Review the transaction history before taking action.',
-  )
-}
-
 export default function App() {
   const [page, setPage] = useState('Overview')
-  const [layout, setLayout] = useState<Layout>('Classic')
-  const redesigned = layout === 'Redesigned'
   const [demoSummary, setSummary] = useState<AnyRecord>({})
   const [demoTransactions, setTransactions] = useState<AnyRecord[]>([])
   const [demoCommitments, setCommitments] = useState<AnyRecord[]>([])
@@ -287,18 +258,6 @@ export default function App() {
     ),
   )
 
-  // The API exposes annualised estimates. Monthly equivalent is derived,
-  // not historical monthly spending.
-  const annualSpend = getNumber(summary, 'estimated_annual_cost')
-  const monthlySpend = annualSpend / 12
-
-  const totalCommitments = commitments.length
-  const reviewCount = alerts.length
-  const reviewTransactionCount = getNumber(
-    summary,
-    'review_required_transaction_count',
-  )
-
   const navItems = [
     { name: 'Overview', icon: LayoutDashboard },
     { name: 'Recurring payments', icon: RefreshCw },
@@ -360,8 +319,8 @@ export default function App() {
 
   const selectedGuidance = selected?.cancellation_guidance as CancellationGuidance | undefined
   const selectedId = String(selected?.commitment_id ?? selected?.id ?? '')
-  const loadedEvidence = selected && redesigned ? linkedDebits(selected, transactions) : []
-  const needsDemoEvidence = redesigned && !privateMode && !!selectedId
+  const loadedEvidence = selected ? linkedDebits(selected, transactions) : []
+  const needsDemoEvidence = !privateMode && !!selectedId
     && Array.isArray(selected?.transaction_ids) && new Set(selected.transaction_ids).size > loadedEvidence.length
   useEffect(() => {
     if (!needsDemoEvidence || !selected) return
@@ -441,7 +400,7 @@ export default function App() {
   const cardsFor = (rows: AnyRecord[]) => commitmentCards(rows, transactions, summary.currency, asOf, commitmentName, confidence,
     item => commitmentRevocation(item, revocations, privateMode).reported)
   const workspaceKey = JSON.stringify([privateMode ? (HOSTED ? 'hosted' : 'local') : 'demo', statement?.analysis_id ?? null])
-  const alertModels = redesigned ? buildAlertCards(alerts, transactions, commitments) : []
+  const alertModels = buildAlertCards(alerts, transactions, commitments)
   const alertProps = {
     alerts: alertModels, workspaceKey, loading: ledgerState.loading, error: ledgerState.error ? error : undefined,
     formatAmount: money, requestExplanation: explainWithSarvam, onRetry: () => void loadData(),
@@ -453,10 +412,10 @@ export default function App() {
   const evidenceIds = new Set(evidenceRows.map(tx => tx.id))
   const evidenceAlertCount = selected ? alertModels.filter(alert => alert.commitmentId === selectedId
     || alert.transactions.some(row => evidenceIds.has(row.id))).length : 0
-  const forecastChart = redesigned && <ForecastCard key={`forecast:${workspaceKey}`} commitments={commitments}
+  const forecastChart = <ForecastCard key={`forecast:${workspaceKey}`} commitments={commitments}
     transactions={transactions} currency={summary.currency} nameFor={commitmentName}
     loading={ledgerState.loading} error={ledgerState.error ? error : null} />
-  const observedWindow = redesigned && page === 'Overview' ? observedStatementWindow(transactions, asOf) : null
+  const observedWindow = page === 'Overview' ? observedStatementWindow(transactions, asOf) : null
 
   if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') {
     return (
@@ -472,14 +431,14 @@ export default function App() {
   return (
     <>
       <AppShell page={page} pageLabel={pageLabel} navItems={navItems} onNavigate={setPage}
-        commitmentCount={commitments.length} privateMode={privateMode} layout={layout} onLayoutChange={setLayout}>
+        commitmentCount={commitments.length} privateMode={privateMode}>
         <div className="page-content">
-          {redesigned && <WorkspaceSelector key={hostedSession}
+          <WorkspaceSelector key={hostedSession}
             mode={HOSTED ? 'hosted' : import.meta.env.VITE_FINSIGHT_DEMO === 'true' ? 'demo' : 'local'}
             request={workspaceRequest(API, HOSTED, hostedToken)} connected={Boolean(hostedToken)}
             statement={statement} onSwitch={data => {
               if (!HOSTED || hostedSession === activeHostedSession.current) changeStatement(data)
-            }} onImport={() => setPage('Import statement')} />}
+            }} onImport={() => setPage('Import statement')} />
           <section className="welcome-row">
             <div>
               <h1>
@@ -557,28 +516,7 @@ export default function App() {
 
           {page === 'Overview' && (
             <>
-              {redesigned ? <LedgerKpis {...ledgerState} items={ledgerKpis(summary, commitments, transactions, alerts, asOf)} />
-              : <section className="summary-ledger" aria-label="Recurring payment summary">
-                <div className="lead-amount">
-                  <span className="stat-label">Estimated monthly equivalent</span>
-                  <strong>{money(monthlySpend)}</strong>
-                  <span className="stat-note">Annual estimate divided by 12</span>
-                </div>
-                <dl className="summary-facts">
-                  <div>
-                    <dt>Estimated annual cost</dt>
-                    <dd>{money(annualSpend)}<span>Where cadence can be estimated</span></dd>
-                  </div>
-                  <div>
-                    <dt>Detected patterns</dt>
-                    <dd>{totalCommitments}<span>Candidates from transaction history</span></dd>
-                  </div>
-                  <div>
-                    <dt>Transactions flagged</dt>
-                    <dd>{reviewTransactionCount}<span>{reviewCount} review items</span></dd>
-                  </div>
-                </dl>
-              </section>}
+              <LedgerKpis {...ledgerState} items={ledgerKpis(summary, commitments, transactions, alerts, asOf)} />
 
               {forecastChart}
               <SubscriptionTimeline
@@ -607,74 +545,20 @@ export default function App() {
                       View all
                     </button>
                   </div>
-                  {redesigned ? <CommitmentList {...ledgerState} groups={cardsFor(commitments.slice(0, 5))} onSelect={setSelected} /> : <CommitmentTable
-                    items={commitments.slice(0, 5)}
-                    revocations={revocations}
-                    privateMode={privateMode}
-                    loading={loading}
-                    onSelect={setSelected}
-                    nameFor={commitmentName}
-                    amountFor={(item) => money(commitmentAmount(item))}
-                    cadenceFor={commitmentCadence}
-                    confidenceFor={confidence}
-                  />}
+                  <CommitmentList {...ledgerState} groups={cardsFor(commitments.slice(0, 5))} onSelect={setSelected} />
                 </section>
 
-                {redesigned ? <div>
+                <div>
                   <AlertCards {...alertProps} previewLimit={3} />
                   <button className="text-button" type="button" onClick={() => setPage('Review')}>See all review signals</button>
-                </div> : <section className="panel alerts-panel">
-                  <div className="panel-heading">
-                    <div>
-                      <h2>Needs a closer look</h2>
-                      <p>Flags from the transaction detector</p>
-                    </div>
-                    <span className="alert-count">{alerts.length}</span>
-                  </div>
-                  <div className="alert-list">
-                    {alerts.slice(0, 5).map((alert, index) => (
-                      <div className="alert-item" key={String(alert.alert_id ?? alert.id ?? index)}>
-                        <div className="alert-copy">
-                          <strong>
-                            {String(valueFor(
-                              alert,
-                              ['title', 'display_name', 'merchant', 'description', 'type'],
-                              'Review suggested',
-                            ))}
-                          </strong>
-                          <p>{evidenceText(alert)}</p>
-                          {Boolean(alert.recommended_action) && (
-                            <p className="alert-action">
-                              Next check: {String(alert.recommended_action)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                    {loading && alerts.length === 0 && (
-                      <div className="alert-skeletons" role="status" aria-label="Loading review items">
-                        <span /><span /><span />
-                      </div>
-                    )}
-                    {alerts.length === 0 && !loading && (
-                      <EmptyState text="No unusual transactions need review." />
-                    )}
-                  </div>
-                  <button
-                    className="text-button"
-                    onClick={() => setPage('Review')}
-                    type="button"
-                  >
-                    See all review signals
-                  </button>
-                </section>}
+                </div>
               </section>
-              {redesigned && <CommitmentBreakdown key={`breakdown:${workspaceKey}`} commitments={commitments} currency={summary.currency}
+              <CommitmentBreakdown key={`breakdown:${workspaceKey}`} commitments={commitments} currency={summary.currency}
                 nameFor={commitmentName} loading={ledgerState.loading} error={ledgerState.error ? error : null}
                 scope={{
                   workspace: statement?.local_account ?? (privateMode ? (HOSTED ? 'Hosted analysis' : 'Imported statement') : 'Synthetic demo'),
                   observedFrom: observedWindow?.first, observedTo: observedWindow?.last, reviewSignals: alerts.length,
-                }} />}
+                }} />
             </>
           )}
 
@@ -703,18 +587,8 @@ export default function App() {
                 />
               </div>
 
-              {redesigned ? <CommitmentList {...ledgerState} groups={cardsFor(filteredCommitments)} onSelect={setSelected} /> : <CommitmentTable
-                items={filteredCommitments}
-                revocations={revocations}
-                privateMode={privateMode}
-                loading={loading}
-                onSelect={setSelected}
-                nameFor={commitmentName}
-                amountFor={(item) => money(commitmentAmount(item))}
-                cadenceFor={commitmentCadence}
-                confidenceFor={confidence}
-              />}
-              {redesigned && <p className="stat-note">Freelancer planning · Session only</p>}
+              <CommitmentList {...ledgerState} groups={cardsFor(filteredCommitments)} onSelect={setSelected} />
+              <p className="stat-note">Freelancer planning · Session only</p>
               <BusinessExpensePlanner key={statement?.analysis_id ?? 'demo'} commitments={commitments}
                 nameFor={commitmentName} formatAmount={money} onSelect={setSelected} />
             </section>
@@ -813,9 +687,7 @@ export default function App() {
           )}
 
           {page === 'Evaluation & Audit' && <><p className="stat-note">Static benchmark</p><BenchmarkDashboard /></>}
-          {page === 'Review' && (redesigned ? <AlertCards {...alertProps} />
-            : <TransactionReview key={statement?.analysis_id ?? 'demo'} alerts={alerts}
-              transactions={transactions} commitments={commitments} formatAmount={money} onSelect={setSelected} />)}
+          {page === 'Review' && <AlertCards {...alertProps} />}
           {page === 'Ask FinSight' && <LedgerAssistant key={statement?.analysis_id ?? 'demo'}
             alerts={alerts} transactions={transactions} commitments={commitments}
             formatAmount={money} nameFor={commitmentName} onSelect={setSelected} onNavigate={setPage} />}
@@ -828,7 +700,7 @@ export default function App() {
           {page === 'Import statement' && (
             <>
               {HOSTED && hostedSignOutError && <div role="alert" className="error-banner"><p>{hostedSignOutError}</p></div>}
-              {(!HOSTED || hostedToken) && <StatementImport redesigned={redesigned} existing={statement} hostedToken={hostedToken}
+              {(!HOSTED || hostedToken) && <StatementImport existing={statement} hostedToken={hostedToken}
                 request={(payload, signal) => requestAnalysis(API, payload, signal, hostedToken)} onAnalyze={(next) => {
                 if (HOSTED && hostedSession !== activeHostedSession.current) return
                 if (statement?.analysis_id === next.analysis_id) {
@@ -872,7 +744,7 @@ export default function App() {
       </AppShell>
 
       {selected && (
-        <div ref={modalRef} className={redesigned ? 'modal-backdrop evidence-drawer' : 'modal-backdrop'} onMouseDown={(event) => {
+        <div ref={modalRef} className="modal-backdrop evidence-drawer" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setSelected(null)
         }}>
           <section
@@ -1105,11 +977,11 @@ export default function App() {
               })()}
             </div>
 
-            {redesigned && <ObservedEvidence rows={evidenceRows} currency={ledgerCurrency(selected.currency, summary.currency)}
-              loading={needsDemoEvidence && !activeEvidence} error={activeEvidence?.error ?? false} />}
+            <ObservedEvidence rows={evidenceRows} currency={ledgerCurrency(selected.currency, summary.currency)}
+              loading={needsDemoEvidence && !activeEvidence} error={activeEvidence?.error ?? false} />
 
-            {redesigned && <SarvamEvidenceContext contextKey={JSON.stringify([workspaceKey, selectedId])}
-              evidence={{ evidence_type: 'review', count: evidenceAlertCount }} requestExplanation={explainWithSarvam} />}
+            <SarvamEvidenceContext contextKey={JSON.stringify([workspaceKey, selectedId])}
+              evidence={{ evidence_type: 'review', count: evidenceAlertCount }} requestExplanation={explainWithSarvam} />
 
             {selectedGuidance?.summary && <p className="tracker-summary">{selectedGuidance.summary}</p>}
             {selectedGuide && selectedGuide.steps.length > 0 && selectedId && (
@@ -1147,124 +1019,6 @@ export default function App() {
         </div>
       )}
     </>
-  )
-}
-
-function CommitmentTable({
-  items,
-  revocations,
-  privateMode,
-  loading,
-  onSelect,
-  nameFor,
-  amountFor,
-  cadenceFor,
-  confidenceFor,
-}: {
-  items: AnyRecord[]
-  revocations: Record<string, RevocationState>
-  privateMode: boolean
-  loading: boolean
-  onSelect: (item: AnyRecord) => void
-  nameFor: (item: AnyRecord) => string
-  amountFor: (item: AnyRecord) => string
-  cadenceFor: (item: AnyRecord) => string
-  confidenceFor: (item: AnyRecord) => string
-}) {
-  if (loading && items.length === 0) {
-    return (
-      <div className="table-loading" role="status" aria-label="Loading recurring patterns">
-        {[0, 1, 2].map((row) => (
-          <div className="skeleton-row" key={row} aria-hidden="true">
-            <span className="skeleton-marker" />
-            <span className="skeleton-line" />
-            <span className="skeleton-line short" />
-            <span className="skeleton-line medium" />
-          </div>
-        ))}
-      </div>
-    )
-  }
-
-  if (items.length === 0) {
-    return (
-      <EmptyState text="No recurring patterns were detected in these records." />
-    )
-  }
-
-  return (
-    <div className="table-scroll">
-      <table aria-label="Detected recurring payment patterns">
-        <thead>
-          <tr>
-            <th scope="col">Merchant / descriptor</th>
-            <th scope="col">Cadence</th>
-            <th scope="col">Observed amount</th>
-            <th scope="col">Confidence</th>
-            <th scope="col">Mandate tracking</th>
-            <th scope="col"><span className="sr-only">Details</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, index) => (
-            <tr key={String(item.commitment_id ?? item.id ?? `${nameFor(item)}-${index}`)}>
-              <td data-label="Merchant">
-                <div className="merchant-cell">
-                  <div>
-                    <strong>{nameFor(item)}</strong>
-                    <span>From transaction history</span>
-                  </div>
-                </div>
-              </td>
-              <td data-label="Cadence"><span className="cadence-pill">{cadenceFor(item)}</span></td>
-              <td data-label="Observed amount" className="amount-cell">{amountFor(item)}</td>
-              <td data-label="Confidence">
-                <span className="confidence-pill">
-                  <CheckCircle2 size={14} />
-                  {confidenceFor(item)}
-                </span>
-              </td>
-              <td data-label="Mandate tracking">
-                {(() => {
-                  const { state: revState, total, reported } = commitmentRevocation(item, revocations, privateMode)
-                  if (reported) {
-                    return (
-                      <span className="revocation-pill pill-revoked">
-                        Marked as revoked (user-reported)
-                      </span>
-                    )
-                  }
-                  if (revState.status === 'in_progress') {
-                    return (
-                      <span className="revocation-pill pill-progress">
-                        {revState.completedIndices.length === total
-                          ? 'Checklist complete'
-                          : <>Tracking ({revState.completedIndices.length}/{total})</>}
-                      </span>
-                    )
-                  }
-                  return item.review_required ? null : <span className="no-review">Detected pattern</span>
-                })()}
-                {Boolean(item.review_required) && (
-                  <span className="review-pill mandate-review-pill">
-                    {Number(item.review_transaction_count ?? 0)} flagged
-                  </span>
-                )}
-              </td>
-              <td data-label="Details">
-                <button
-                  className="row-button"
-                  onClick={() => onSelect(item)}
-                  aria-label={`View ${nameFor(item)}`}
-                >
-                  <ChevronRight size={17} />
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   )
 }
 
